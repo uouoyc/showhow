@@ -10,8 +10,8 @@ Showhow is a personal, self-hosted tool for recording browser interactions and p
 ## Development
 
 ```powershell
-pnpm --dir web install
-pnpm --dir web dev
+pnpm install
+pnpm dev
 ```
 
 Engineering workflow and project terminology are documented in `AGENTS.md`, `docs/agents/`, and `CONTEXT.md`.
