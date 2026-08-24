@@ -18,6 +18,7 @@ type EditorStep = {
 
 type EditorWalkthrough = {
   ctaUrl: string | null;
+  draftError: string | null;
   id: string;
   slug: string;
   title: string;
@@ -135,8 +136,10 @@ export function WalkthroughEditor({
       </header>
 
       <div className="min-h-6 text-sm" aria-live="polite">
-        {error ? (
-          <p className="text-red-700 dark:text-red-400">{error}</p>
+        {error || walkthrough.draftError ? (
+          <p className="text-amber-700 dark:text-amber-400">
+            {error || walkthrough.draftError}
+          </p>
         ) : null}
         {message ? (
           <p className="text-green-700 dark:text-green-400">{message}</p>

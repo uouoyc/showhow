@@ -22,6 +22,13 @@
       "when": 1787578951266,
       "tag": "0002_add-editor-fields",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787580229792,
+      "tag": "0003_add-drafting-status",
+      "breakpoints": true
     }
   ]
 }

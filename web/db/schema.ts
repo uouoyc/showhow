@@ -11,6 +11,8 @@ export const walkthroughs = sqliteTable("walkthroughs", {
   slug: text().notNull().unique(),
   title: text().notNull(),
   ctaUrl: text("cta_url"),
+  draftedAt: integer("drafted_at", { mode: "timestamp_ms" }),
+  draftError: text("draft_error"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });

@@ -131,6 +131,19 @@ async function stopRecording(): Promise<ShowhowStopRecordingResult> {
     }
 
     await captureQueue.stop();
+    try {
+      const response = await fetch(
+        `${recording.serverUrl}/api/walkthroughs/${recording.walkthroughId}/finalize`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        throw new Error();
+      }
+    } catch {
+      await setCaptureError(
+        "Description drafting could not finish. Recorded labels were kept.",
+      );
+    }
     const { captureError } = await chrome.storage.local.get("captureError");
     const result: ShowhowStopRecordingResult = {
       editorUrl: `${recording.serverUrl}/edit/${recording.walkthroughId}`,
