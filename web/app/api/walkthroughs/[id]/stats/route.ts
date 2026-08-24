@@ -1,12 +1,12 @@
 import { recordCompletion, recordView } from "@/lib/stats";
-import { findWalkthroughBySlug } from "@/lib/walkthroughs";
+import { findWalkthroughById } from "@/lib/walkthroughs";
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ slug: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { slug } = await params;
-  const walkthrough = findWalkthroughBySlug(slug);
+  const { id } = await params;
+  const walkthrough = findWalkthroughById(id);
 
   if (!walkthrough) {
     return Response.json({ error: "Walkthrough not found." }, { status: 404 });

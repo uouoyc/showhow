@@ -15,7 +15,7 @@ const { createWalkthrough, findWalkthroughById } = await import(
   "../lib/walkthroughs"
 );
 const { POST: postStats } = await import(
-  "../app/api/walkthroughs/[slug]/stats/route"
+  "../app/api/walkthroughs/[id]/stats/route"
 );
 const { GET: getExport } = await import(
   "../app/api/walkthroughs/[id]/export/route"
@@ -79,7 +79,7 @@ test("Walkthrough export contains ordered capture data", () => {
 
 test("public stats and JSON export routes expose the services", async () => {
   const walkthrough = createWalkthrough("Route sharing");
-  const statsParams = { params: Promise.resolve({ slug: walkthrough.slug }) };
+  const statsParams = { params: Promise.resolve({ id: walkthrough.id }) };
 
   const viewResponse = await postStats(
     new Request("http://showhow.test", {

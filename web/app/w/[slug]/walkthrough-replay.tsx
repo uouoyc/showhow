@@ -17,14 +17,14 @@ type ReplayStep = {
 
 export function WalkthroughReplay({
   ctaUrl,
-  slug,
   steps,
   title,
+  walkthroughId,
 }: {
   ctaUrl: string | null;
-  slug: string;
   steps: ReplayStep[];
   title: string;
+  walkthroughId: string;
 }) {
   const [finished, setFinished] = useState(false);
   const [index, setIndex] = useState(0);
@@ -38,12 +38,12 @@ export function WalkthroughReplay({
       return;
     }
     viewSent.current = true;
-    void fetch(`/api/walkthroughs/${slug}/stats`, {
+    void fetch(`/api/walkthroughs/${walkthroughId}/stats`, {
       body: JSON.stringify({ type: "view" }),
       headers: { "content-type": "application/json" },
       method: "POST",
     });
-  }, [slug]);
+  }, [walkthroughId]);
 
   const recordCompletion = useCallback(async () => {
     if (completionSent.current) {
@@ -57,11 +57,14 @@ export function WalkthroughReplay({
     });
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const response = await fetch(`/api/walkthroughs/${slug}/stats`, {
-          body,
-          headers: { "content-type": "application/json" },
-          method: "POST",
-        });
+        const response = await fetch(
+          `/api/walkthroughs/${walkthroughId}/stats`,
+          {
+            body,
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          },
+        );
         if (response.ok) {
           return;
         }
@@ -69,7 +72,7 @@ export function WalkthroughReplay({
         // Retry with the same idempotency key.
       }
     }
-  }, [slug]);
+  }, [walkthroughId]);
 
   const advance = useCallback(() => {
     if (index >= steps.length - 1) {

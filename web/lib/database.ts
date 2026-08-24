@@ -17,7 +17,9 @@ sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("busy_timeout = 5000");
 
 export const db = drizzle({ client: sqlite, schema });
-migrate(db, { migrationsFolder: resolve(process.cwd(), "drizzle") });
+if (process.env.NEXT_PHASE !== "phase-production-build") {
+  migrate(db, { migrationsFolder: resolve(process.cwd(), "drizzle") });
+}
 
 export function closeDatabase() {
   sqlite.close();

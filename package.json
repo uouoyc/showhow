@@ -4,8 +4,9 @@
   "scripts": {
     "build": "pnpm --filter extension build && pnpm --filter web build",
     "dev": "pnpm --filter web dev",
-    "lint": "pnpm --filter web lint",
+    "lint": "pnpm --filter web exec biome check ../extension/src ../extension/tests ../extension/manifest.json ../extension/tsconfig.json && pnpm --filter web lint",
     "test": "pnpm --recursive --if-present test",
+    "test:e2e": "pnpm --filter web test:e2e",
     "typecheck": "pnpm --recursive --if-present typecheck"
   },
   "packageManager": "pnpm@11.22.0"

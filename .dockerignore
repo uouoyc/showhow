@@ -1,0 +1,9 @@
+.git
+.agents
+**/node_modules
+**/.next
+**/data
+**/.env*
+extension/dist
+web/playwright-report
+web/test-results

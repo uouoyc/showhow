@@ -1,0 +1,21 @@
+name: showhow
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    env_file:
+      - path: ./web/.env
+        required: false
+    environment:
+      DATA_DIR: /data
+    init: true
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    volumes:
+      - showhow-data:/data
+
+volumes:
+  showhow-data:

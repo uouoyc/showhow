@@ -19,7 +19,10 @@ test("capture queue preserves order, spacing, and stop semantics", async () => {
   );
   const stopped = queue.stop();
 
-  await assert.rejects(queue.enqueue(async () => 4), /stopped/i);
+  await assert.rejects(
+    queue.enqueue(async () => 4),
+    /stopped/i,
+  );
   assert.deepEqual(await Promise.all(captures), [1, 2, 3]);
   await stopped;
   assert.deepEqual(order, [1, 2, 3]);
