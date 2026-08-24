@@ -17,3 +17,28 @@ type ShowhowCaptureClickMessage = {
     viewportWidth: number;
   };
 };
+
+type ShowhowClickCapture = ShowhowCaptureClickMessage["capture"];
+
+type ShowhowStartRecordingMessage = {
+  type: "start-recording";
+  recording: ShowhowRecordingState;
+};
+
+type ShowhowStopRecordingMessage = {
+  type: "stop-recording";
+};
+
+type ShowhowPingMessage = {
+  type: "recording-ping";
+};
+
+type ShowhowStopRecordingResult = {
+  editorUrl: string;
+  ok: true;
+};
+
+type ShowhowErrorResult = {
+  error: string;
+  ok: false;
+};

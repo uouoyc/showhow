@@ -30,19 +30,52 @@ function render(recording?: ShowhowRecordingState) {
 }
 
 async function initializePopup() {
-  const stored = await chrome.storage.local.get(["recording", "serverUrl"]);
+  const stored = await chrome.storage.local.get([
+    "captureError",
+    "recording",
+    "serverUrl",
+  ]);
   const activeRecording = stored.recording as ShowhowRecordingState | undefined;
   serverUrlInput.value =
     typeof stored.serverUrl === "string"
       ? stored.serverUrl
       : serverUrlInput.value;
   render(activeRecording);
+  statusMessage.textContent =
+    typeof stored.captureError === "string" ? stored.captureError : "";
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     statusMessage.textContent = "";
 
     try {
+      const [activeTab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (!activeTab?.url || !/^https?:\/\//.test(activeTab.url)) {
+        throw new Error(
+          "Open an HTTP or HTTPS page before starting a Recording.",
+        );
+      }
+      if (activeTab.id === undefined) {
+        throw new Error("The active tab is unavailable.");
+      }
+
+      try {
+        const ping: { ok?: boolean } = await chrome.tabs.sendMessage(
+          activeTab.id,
+          { type: "recording-ping" } satisfies ShowhowPingMessage,
+        );
+        if (!ping.ok) {
+          throw new Error();
+        }
+      } catch {
+        throw new Error(
+          "Showhow cannot capture this page. Reload it or open another HTTP(S) page.",
+        );
+      }
+
       const data = new FormData(form);
       const title = String(data.get("title") ?? "").trim();
       const serverUrl = normalizedServerUrl(
@@ -66,8 +99,13 @@ async function initializePopup() {
         walkthroughId: body.walkthrough.id,
       };
 
-      await chrome.storage.local.set({ recording, serverUrl });
-      await chrome.action.setBadgeText({ text: "0" });
+      const started: { ok: boolean } = await chrome.runtime.sendMessage({
+        type: "start-recording",
+        recording,
+      } satisfies ShowhowStartRecordingMessage);
+      if (!started.ok) {
+        throw new Error("Unable to start Recording.");
+      }
       render(recording);
     } catch (reason) {
       statusMessage.textContent =
@@ -76,19 +114,19 @@ async function initializePopup() {
   });
 
   stopButton.addEventListener("click", async () => {
-    const { recording } = await chrome.storage.local.get("recording");
-    const current = recording as ShowhowRecordingState | undefined;
+    statusMessage.textContent = "Stopping…";
+    const result: ShowhowStopRecordingResult | ShowhowErrorResult =
+      await chrome.runtime.sendMessage({
+        type: "stop-recording",
+      } satisfies ShowhowStopRecordingMessage);
 
-    if (!current) {
-      render();
+    if (!result.ok) {
+      statusMessage.textContent = result.error;
       return;
     }
 
-    await chrome.storage.local.remove("recording");
-    await chrome.action.setBadgeText({ text: "" });
-    await chrome.tabs.create({
-      url: `${current.serverUrl}/edit/${current.walkthroughId}`,
-    });
+    await chrome.tabs.create({ url: result.editorUrl });
+    statusMessage.textContent = "";
     render();
   });
 }
