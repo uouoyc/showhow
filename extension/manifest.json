@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Showhow Recorder",
+  "version": "0.1.0",
+  "description": "Capture browser clicks as Showhow Walkthrough Steps.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Showhow Recorder"
+  },
+  "background": {
+    "service_worker": "dist/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["dist/content-script.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": ["storage", "tabs"]
+}

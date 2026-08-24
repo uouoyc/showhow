@@ -52,3 +52,7 @@ export function findWalkthroughBySlug(slug: string): Walkthrough | undefined {
     .where(eq(walkthroughs.slug, slug))
     .get();
 }
+
+export function findWalkthroughById(id: string): Walkthrough | undefined {
+  return db.select().from(walkthroughs).where(eq(walkthroughs.id, id)).get();
+}

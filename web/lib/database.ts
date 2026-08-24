@@ -8,7 +8,8 @@ import * as schema from "@/db/schema";
 const dataDir = resolve(
   /* turbopackIgnore: true */ process.env.DATA_DIR ?? "./data",
 );
-mkdirSync(join(dataDir, "screenshots"), { recursive: true });
+export const screenshotsDir = join(dataDir, "screenshots");
+mkdirSync(screenshotsDir, { recursive: true });
 
 const sqlite = new Database(join(dataDir, "showhow.db"));
 sqlite.pragma("foreign_keys = ON");

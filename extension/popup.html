@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Showhow Recorder</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Showhow</h1>
+      <form id="start-form">
+        <label for="server-url">Web server</label>
+        <input id="server-url" name="server-url" type="url" value="http://localhost:3000" required />
+        <label for="title">Walkthrough title</label>
+        <input id="title" name="title" maxlength="120" required />
+        <button type="submit">Start recording</button>
+      </form>
+      <section id="recording" hidden>
+        <p id="recording-title"></p>
+        <p><span id="step-count">0</span> Steps captured</p>
+        <button id="stop" type="button">Stop recording</button>
+      </section>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+    <script src="dist/popup.js" type="module"></script>
+  </body>
+</html>

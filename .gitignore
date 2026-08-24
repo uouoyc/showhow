@@ -1,5 +1,6 @@
 .agents/
-/node_modules/
+node_modules/
+/extension/dist/
 
 # environment files
 .env*

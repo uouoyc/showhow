@@ -1,0 +1,52 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+main,
+form,
+section {
+  display: grid;
+  gap: 12px;
+}
+
+main {
+  padding: 20px;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+input,
+button {
+  border: 1px solid #a1a1aa;
+  border-radius: 8px;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+button {
+  background: #18181b;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+#status {
+  color: #b91c1c;
+  min-height: 20px;
+}
