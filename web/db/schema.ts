@@ -13,6 +13,8 @@ export const walkthroughs = sqliteTable("walkthroughs", {
   ctaUrl: text("cta_url"),
   draftedAt: integer("drafted_at", { mode: "timestamp_ms" }),
   draftError: text("draft_error"),
+  views: integer().notNull().default(0),
+  completions: integer().notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
@@ -56,3 +58,10 @@ export const steps = sqliteTable(
 );
 
 export type Step = typeof steps.$inferSelect;
+
+export const completionReceipts = sqliteTable("completion_receipts", {
+  id: text().primaryKey(),
+  walkthroughId: text("walkthrough_id")
+    .notNull()
+    .references(() => walkthroughs.id, { onDelete: "cascade" }),
+});

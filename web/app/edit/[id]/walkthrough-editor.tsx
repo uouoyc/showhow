@@ -17,11 +17,13 @@ type EditorStep = {
 };
 
 type EditorWalkthrough = {
+  completions: number;
   ctaUrl: string | null;
   draftError: string | null;
   id: string;
   slug: string;
   title: string;
+  views: number;
 };
 
 async function requestEditorChange(url: string, init: RequestInit) {
@@ -118,6 +120,20 @@ export function WalkthroughEditor({
     );
   }
 
+  async function copyToClipboard(label: string, value: string) {
+    setError("");
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage(`${label} copied.`);
+    } catch {
+      setError(`Unable to copy ${label.toLowerCase()}.`);
+    }
+  }
+
+  function publicUrl() {
+    return `${window.location.origin}/w/${walkthrough.slug}`;
+  }
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-8 px-6 py-16">
       <header className="space-y-3">
@@ -133,6 +149,36 @@ export function WalkthroughEditor({
         >
           Open public Walkthrough
         </Link>
+        <p className="text-sm text-zinc-500">
+          {walkthrough.views} views · {walkthrough.completions} completions
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
+            onClick={() => void copyToClipboard("Public link", publicUrl())}
+            type="button"
+          >
+            Copy public link
+          </button>
+          <button
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
+            onClick={() =>
+              void copyToClipboard(
+                "Embed code",
+                `<iframe src="${publicUrl()}" title="Showhow Walkthrough" loading="lazy"></iframe>`,
+              )
+            }
+            type="button"
+          >
+            Copy iframe
+          </button>
+          <a
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
+            href={`/api/walkthroughs/${walkthrough.id}/export`}
+          >
+            Export JSON
+          </a>
+        </div>
       </header>
 
       <div className="min-h-6 text-sm" aria-live="polite">
@@ -203,6 +249,12 @@ export function WalkthroughEditor({
                 onSubmit={(event) => saveStep(event, step.id)}
               >
                 <p className="text-sm text-zinc-500">Step {step.sequence}</p>
+                <a
+                  className="w-fit text-sm font-medium underline underline-offset-4"
+                  href={`/api/screens/${step.screenshotFile}?download=1`}
+                >
+                  Download screenshot
+                </a>
                 <label className="grid gap-2 font-medium">
                   Title
                   <input

@@ -5,7 +5,7 @@ import { screenshotsDir } from "@/lib/database";
 const screenshotName = /^[a-f0-9-]{36}\.(png|jpg)$/i;
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ file: string }> },
 ) {
   const { file } = await params;
@@ -16,12 +16,14 @@ export async function GET(
 
   try {
     const image = await readFile(join(screenshotsDir, file));
-    return new Response(image, {
-      headers: {
-        "cache-control": "public, max-age=31536000, immutable",
-        "content-type": file.endsWith(".png") ? "image/png" : "image/jpeg",
-      },
-    });
+    const headers: Record<string, string> = {
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-type": file.endsWith(".png") ? "image/png" : "image/jpeg",
+    };
+    if (new URL(request.url).searchParams.get("download") === "1") {
+      headers["content-disposition"] = `attachment; filename="${file}"`;
+    }
+    return new Response(image, { headers });
   } catch {
     return new Response(null, { status: 404 });
   }

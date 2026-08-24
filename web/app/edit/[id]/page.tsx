@@ -30,11 +30,13 @@ export default async function EditWalkthroughPage({
         viewportWidth: step.viewportWidth,
       }))}
       walkthrough={{
+        completions: walkthrough.completions,
         ctaUrl: walkthrough.ctaUrl,
         draftError: walkthrough.draftError,
         id: walkthrough.id,
         slug: walkthrough.slug,
         title: walkthrough.title,
+        views: walkthrough.views,
       }}
     />
   );

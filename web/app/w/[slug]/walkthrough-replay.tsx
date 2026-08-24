@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { scaleHotspot } from "@/lib/hotspot";
 
 type ReplayStep = {
@@ -17,24 +17,68 @@ type ReplayStep = {
 
 export function WalkthroughReplay({
   ctaUrl,
+  slug,
   steps,
   title,
 }: {
   ctaUrl: string | null;
+  slug: string;
   steps: ReplayStep[];
   title: string;
 }) {
   const [finished, setFinished] = useState(false);
   const [index, setIndex] = useState(0);
   const [started, setStarted] = useState(false);
+  const completionId = useRef(crypto.randomUUID());
+  const completionSent = useRef(false);
+  const viewSent = useRef(false);
+
+  useEffect(() => {
+    if (viewSent.current) {
+      return;
+    }
+    viewSent.current = true;
+    void fetch(`/api/walkthroughs/${slug}/stats`, {
+      body: JSON.stringify({ type: "view" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+  }, [slug]);
+
+  const recordCompletion = useCallback(async () => {
+    if (completionSent.current) {
+      return;
+    }
+    completionSent.current = true;
+
+    const body = JSON.stringify({
+      completionId: completionId.current,
+      type: "completion",
+    });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await fetch(`/api/walkthroughs/${slug}/stats`, {
+          body,
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        });
+        if (response.ok) {
+          return;
+        }
+      } catch {
+        // Retry with the same idempotency key.
+      }
+    }
+  }, [slug]);
 
   const advance = useCallback(() => {
     if (index >= steps.length - 1) {
       setFinished(true);
+      void recordCompletion();
       return;
     }
     setIndex((current) => current + 1);
-  }, [index, steps.length]);
+  }, [index, recordCompletion, steps.length]);
 
   const back = useCallback(() => {
     if (finished) {

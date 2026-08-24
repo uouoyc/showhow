@@ -20,6 +20,7 @@ export default async function WalkthroughPage({
   return (
     <WalkthroughReplay
       ctaUrl={walkthrough.ctaUrl}
+      slug={walkthrough.slug}
       steps={listSteps(walkthrough.id).map((step) => ({
         clickX: step.clickX,
         clickY: step.clickY,
