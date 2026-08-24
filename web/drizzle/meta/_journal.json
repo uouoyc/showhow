@@ -15,6 +15,13 @@
       "when": 1787576603334,
       "tag": "0001_add-steps",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787578951266,
+      "tag": "0002_add-editor-fields",
+      "breakpoints": true
     }
   ]
 }

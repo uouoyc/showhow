@@ -10,6 +10,7 @@ export const walkthroughs = sqliteTable("walkthroughs", {
   id: text().primaryKey(),
   slug: text().notNull().unique(),
   title: text().notNull(),
+  ctaUrl: text("cta_url"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
@@ -28,6 +29,8 @@ export const steps = sqliteTable(
     screenshotFile: text("screenshot_file").notNull(),
     pageUrl: text("page_url").notNull(),
     elementLabel: text("element_label").notNull(),
+    title: text().notNull().default(""),
+    description: text().notNull().default(""),
     clickX: real("click_x").notNull(),
     clickY: real("click_y").notNull(),
     viewportWidth: integer("viewport_width").notNull(),
