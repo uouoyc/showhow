@@ -1,0 +1,5 @@
+.agents/
+
+# environment files
+.env*
+!.env.example
