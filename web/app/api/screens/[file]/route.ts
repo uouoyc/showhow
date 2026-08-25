@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { screenshotsDir } from "@/lib/database";
 
-const screenshotName = /^[a-f0-9-]{36}\.(png|jpg)$/i;
+const uuid = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
+const screenshotName = new RegExp(`^${uuid}_${uuid}\\.(png|jpg)$`, "i");
 
 export async function GET(
   request: Request,
@@ -18,13 +19,20 @@ export async function GET(
     const image = await readFile(join(screenshotsDir, file));
     const headers: Record<string, string> = {
       "cache-control": "public, max-age=31536000, immutable",
-      "content-type": file.endsWith(".png") ? "image/png" : "image/jpeg",
+      "content-type": file.toLowerCase().endsWith(".png")
+        ? "image/png"
+        : "image/jpeg",
+      "x-content-type-options": "nosniff",
     };
     if (new URL(request.url).searchParams.get("download") === "1") {
       headers["content-disposition"] = `attachment; filename="${file}"`;
     }
     return new Response(image, { headers });
-  } catch {
-    return new Response(null, { status: 404 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return new Response(null, { status: 404 });
+    }
+    console.error("Unable to read Step screenshot.", error);
+    return new Response(null, { status: 500 });
   }
 }

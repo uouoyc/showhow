@@ -1,9 +1,10 @@
 .git
 .agents
 **/node_modules
-**/.next
+**/.next*
 **/data
 **/.env*
+**/*.log
+**/*.pem
+**/*.tsbuildinfo
 extension/dist
-web/playwright-report
-web/test-results

@@ -20,7 +20,7 @@ export function recordCompletion(
   return db.transaction((transaction) => {
     const receipt = transaction
       .insert(completionReceipts)
-      .values({ id: completionId, walkthroughId })
+      .values({ id: `${walkthroughId}:${completionId}`, walkthroughId })
       .onConflictDoNothing()
       .run();
 

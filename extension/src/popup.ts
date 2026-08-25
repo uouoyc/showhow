@@ -1,3 +1,12 @@
+import type {
+  ShowhowErrorResult,
+  ShowhowPingMessage,
+  ShowhowRecordingState,
+  ShowhowStartRecordingMessage,
+  ShowhowStopRecordingMessage,
+  ShowhowStopRecordingResult,
+} from "./types.js";
+
 function popupElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
   if (!element) {
@@ -95,6 +104,7 @@ async function initializePopup() {
       const recording: ShowhowRecordingState = {
         serverUrl,
         stepCount: 0,
+        tabId: activeTab.id,
         title,
         walkthroughId: body.walkthrough.id,
       };
@@ -115,19 +125,28 @@ async function initializePopup() {
 
   stopButton.addEventListener("click", async () => {
     statusMessage.textContent = "Stopping…";
-    const result: ShowhowStopRecordingResult | ShowhowErrorResult =
-      await chrome.runtime.sendMessage({
-        type: "stop-recording",
-      } satisfies ShowhowStopRecordingMessage);
+    stopButton.disabled = true;
 
-    if (!result.ok) {
-      statusMessage.textContent = result.error;
-      return;
+    try {
+      const result: ShowhowStopRecordingResult | ShowhowErrorResult =
+        await chrome.runtime.sendMessage({
+          type: "stop-recording",
+        } satisfies ShowhowStopRecordingMessage);
+
+      if (!result.ok) {
+        statusMessage.textContent = result.error;
+        return;
+      }
+
+      await chrome.tabs.create({ url: result.editorUrl });
+      statusMessage.textContent = "";
+      render();
+    } catch (reason) {
+      statusMessage.textContent =
+        reason instanceof Error ? reason.message : "Unable to stop Recording.";
+    } finally {
+      stopButton.disabled = false;
     }
-
-    await chrome.tabs.create({ url: result.editorUrl });
-    statusMessage.textContent = "";
-    render();
   });
 }
 

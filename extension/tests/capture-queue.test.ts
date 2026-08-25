@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { retryUpload, SerialCaptureQueue } from "../src/capture-queue";
+import {
+  isRecordedTab,
+  retryUpload,
+  SerialCaptureQueue,
+} from "../src/capture-queue";
+
+test("Recording accepts captures only from its original active tab", () => {
+  assert.equal(isRecordedTab(7, 7, 7), true);
+  assert.equal(isRecordedTab(7, 8, 8), false);
+  assert.equal(isRecordedTab(7, 7, 8), false);
+});
 
 test("capture queue preserves order, spacing, and stop semantics", async () => {
   const queue = new SerialCaptureQueue(10);

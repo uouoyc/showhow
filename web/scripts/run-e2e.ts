@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const dataDir = mkdtempSync(join(tmpdir(), "showhow-e2e-"));
+const buildDir = join(process.cwd(), ".next-e2e");
+rmSync(buildDir, { force: true, recursive: true });
 
 try {
   const result = spawnSync(
@@ -17,4 +19,5 @@ try {
   process.exitCode = result.status ?? 1;
 } finally {
   rmSync(dataDir, { force: true, recursive: true });
+  rmSync(buildDir, { force: true, recursive: true });
 }

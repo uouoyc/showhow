@@ -24,6 +24,12 @@ p {
   margin: 0;
 }
 
+.brand {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
 label {
   font-size: 12px;
   font-weight: 600;

@@ -1,69 +1,103 @@
 # Showhow
 
-Showhow is a personal, self-hosted tool for recording browser interactions and publishing them as interactive Walkthroughs.
+A self-hosted tool for recording browser interactions and publishing interactive Walkthroughs.
 
-## Architecture
+[中文](README.zh-CN.md)
 
-- `extension/`: Chrome MV3 popup, content script, and service worker that capture clicks and visible-tab screenshots.
-- `web/`: Next.js 16 App Router editor, public Replay, and HTTP API.
-- SQLite and screenshots: stored together under `DATA_DIR`; Drizzle migrations run automatically when the server opens the database.
+## Quick start
 
-The capture path is:
+### Requirements
+
+- Node.js >= 24.14.0
+- pnpm >= 11.22.0
+- Chrome
+
+### 1. Install dependencies
+
+```bash
+pnpm install
+```
+
+### 2. Configure AI (optional)
+
+```bash
+cp web/.env.example web/.env
+```
+
+Edit `web/.env` and configure a provider compatible with the OpenAI Responses API:
+
+```dotenv
+AI_BASE_URL=https://api.openai.com/v1
+AI_TOKEN=your-token
+AI_MODEL=gpt-5-mini
+```
+
+Without `AI_TOKEN`, Step descriptions use the recorded element labels.
+
+### 3. Start the service
+
+```bash
+pnpm dev
+```
+
+The Web application runs at `http://localhost:3000`.
+
+### 4. Load the extension
+
+```bash
+pnpm --filter extension build
+```
+
+Open `chrome://extensions` in Chrome, enable Developer mode, choose Load unpacked, and select the `extension/` directory.
+
+### 5. Record and publish
+
+1. The extension connects to `http://localhost:3000`; enter a title and click **Start recording**.
+2. Complete the browser flow, then click **Stop recording**.
+3. The extension opens the editor, where you can:
+   - edit the Walkthrough title and CTA URL;
+   - edit each Step title and description;
+   - reorder Steps by dragging the directory or using Up/Down;
+   - delete Steps, download screenshots, and export JSON.
+4. Copy the public link (`/w/[slug]`) or iframe embed code.
+
+The CTA URL is shown as a **Continue** button after the reader completes the final Step.
+
+## Project structure
+
+```text
+showhow/
+├── extension/          # Chrome MV3 extension (recording, screenshots, uploads)
+├── web/                # Next.js 16 app (editor, Replay, API)
+│   ├── data/           # SQLite + screenshots directory (set by DATA_DIR)
+│   └── drizzle/        # database migrations (do not delete)
+```
+
+**Capture path:**
 
 ```text
 page click → content script → service worker screenshot → Web API → SQLite + screenshots/
 ```
 
-Readers open `/w/[slug]`, start the Replay, and activate each recorded Hotspot. The editor supports Step titles and descriptions, reordering, deletion, a final CTA, JSON/image exports, public-link copying, iframe embed code, and local view/completion totals.
+## Deployment
 
-## Requirements
+### Docker Compose
 
-- Node.js 24.14.0
-- pnpm 11.22.0
-- Chrome for recording and Playwright E2E tests
+For the first launch or after code changes:
 
-## Install and develop
-
-```powershell
-pnpm install
-pnpm dev
+```bash
+docker compose up -d --build
 ```
 
-The Web application listens on port 3000. The root workspace owns the lockfile and starts only the Web application in development.
+When the image is already up to date:
 
-## Optional AI descriptions
-
-Copy `web/.env.example` to `web/.env` and configure any Responses-compatible provider:
-
-```dotenv
-AI_BASE_URL=https://api.openai.com/v1
-AI_TOKEN=
-AI_MODEL=gpt-5-mini
+```bash
+docker compose up -d
 ```
 
-`AI_BASE_URL` and `AI_MODEL` are configurable. Without `AI_TOKEN`, recorded element labels remain the Step descriptions. Provider or parsing failures also retain those labels and appear as a non-blocking editor warning.
+### Data directory
 
-Never commit `web/.env`; real environment files are ignored.
-
-## Build and load the Chrome extension
-
-```powershell
-pnpm --filter extension build
-```
-
-In Chrome:
-
-1. Open `chrome://extensions`.
-2. Enable Developer mode.
-3. Choose Load unpacked.
-4. Select the repository's `extension/` directory.
-5. Reload any already-open page that you want to record.
-
-The extension popup defaults to `http://localhost:3000`. Enter a Walkthrough title, start the Recording, click through the browser flow, then stop. Stop waits for queued captures, optionally drafts descriptions, and opens the editor.
-
-## Data location
-
-`DATA_DIR` is resolved from the Web process working directory. Its development default is `web/data/`:
+The default is `web/data/`:
 
 ```text
 web/data/
@@ -71,64 +105,30 @@ web/data/
 └── screenshots/
 ```
 
-The complete directory is ignored by Git. Docker sets `DATA_DIR=/data` and mounts a named volume there. For direct production use, prefer an absolute path.
+## Maintenance
 
-## Export and backup
+### Backup
 
-- Export JSON from the editor. It contains Walkthrough metadata and ordered Step capture data.
-- Download each screenshot directly from its Step card.
-- There is intentionally no ZIP export.
+Stop the service and copy the entire `DATA_DIR`, including `showhow.db` and `screenshots/`. Restore them to the same directory before starting the service again.
 
-For a consistent backup, stop the server and copy the entire `DATA_DIR`. Restore by placing both `showhow.db` and `screenshots/` into the configured directory before starting the server.
+### Tests
 
-## Recording limitations
-
-- Showhow does not block, delay, or replay the page's original click. A screenshot can therefore show the state immediately after navigation or a synchronous UI change.
-- Screenshots are captured serially with at least 500 milliseconds between calls. Wait for each capture when recording fast-changing interfaces.
-- Pending capture queues are memory-only and are not recovered after Chrome or the extension service worker restarts.
-- Chrome internal pages, the Chrome Web Store, and other pages that reject content-script injection cannot be recorded.
-- Cross-origin iframe clicks capture the complete outer tab. Ordinary iframe borders and scaling are translated, but sandboxed/unavailable frames and rotated or skewed transforms can prevent capture or offset the Hotspot.
-- Right-click menus and browser-owned dialogs are outside the page capture boundary.
-
-## Tests and checks
-
-```powershell
-pnpm test
-pnpm test:e2e
-pnpm lint
-pnpm typecheck
-pnpm build
+```bash
+pnpm format      # format
+pnpm lint        # lint
+pnpm typecheck   # type check
+pnpm test        # unit tests
+pnpm test:e2e    # E2E tests
+pnpm build       # build
 ```
 
-`pnpm test:e2e` runs the complete create → capture payload → SQLite/screenshot persistence → public Replay → Hotspot → completion path against an isolated temporary data directory.
+E2E coverage includes Walkthrough creation, screenshot persistence, the editor, drag-and-drop ordering, public Replay, Hotspot activation, and completion statistics.
 
-## Deploy with Docker Compose
+## Limitations
 
-```powershell
-docker compose up --build
-```
-
-The multi-stage image uses `node:24.14.0`. Its build stage verifies `python3`, `make`, and `g++` before installing `better-sqlite3`. The runtime contains only the sanitized standalone server, static assets, Drizzle migrations, and traced runtime dependencies. `web/.env` is optional and is injected at runtime, never copied into the image.
-
-Back up the `showhow-data` volume or mount `/data` to a host directory managed by your backup system.
-
-## Deploy the standalone Node server
-
-Build and enter the standalone application directory before starting it so migrations resolve correctly:
-
-```powershell
-pnpm build
-$env:DATA_DIR = 'C:\showhow-data'
-$env:HOSTNAME = '127.0.0.1'
-$env:PORT = '3000'
-Set-Location web\.next\standalone\web
-node server.js
-```
-
-On Linux, use the same `server.js` with an absolute `DATA_DIR`. Put Caddy, nginx, Traefik, or another reverse proxy in front of port 3000 and terminate TLS there. Only `/w/*`, screenshot reads, and public Replay statistics need to be Internet-accessible; protect the editor and capture/mutation API with reverse-proxy authentication, a VPN, or network access rules.
-
-## Deliberate exclusions
-
-Showhow has no accounts, billing, telemetry, hosted control plane, team workspace, shared asset library, SSO, personalization variables, visitor identity, Step funnel, or third-party analytics.
-
-Engineering workflow and project terminology are documented in `AGENTS.md`, `docs/agents/`, and `CONTEXT.md`.
+- The original click is not blocked or replayed, so a screenshot may already show the post-click state.
+- Screenshots are captured serially with at least 500ms between calls.
+- Pending uploads are not recovered after the extension or service worker restarts.
+- A Recording is bound to its original tab; clicks in another tab are rejected.
+- Chrome internal pages, the Chrome Web Store, and pages that reject content scripts cannot be recorded.
+- Cross-origin iframe clicks capture the outer page; sandboxed or unavailable frames, rotated transforms, and skewed transforms may cause capture failures or Hotspot offsets.

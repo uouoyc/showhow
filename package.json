@@ -4,10 +4,14 @@
   "scripts": {
     "build": "pnpm --filter extension build && pnpm --filter web build",
     "dev": "pnpm --filter web dev",
-    "lint": "pnpm --filter web exec biome check ../extension/src ../extension/tests ../extension/manifest.json ../extension/tsconfig.json && pnpm --filter web lint",
+    "lint": "biome check .",
+    "format": "biome format --write .",
     "test": "pnpm --recursive --if-present test",
     "test:e2e": "pnpm --filter web test:e2e",
     "typecheck": "pnpm --recursive --if-present typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.2"
   },
   "packageManager": "pnpm@11.22.0"
 }

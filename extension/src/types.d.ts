@@ -1,11 +1,12 @@
-type ShowhowRecordingState = {
+export type ShowhowRecordingState = {
   serverUrl: string;
   stepCount: number;
+  tabId: number;
   title: string;
   walkthroughId: string;
 };
 
-type ShowhowCaptureClickMessage = {
+export type ShowhowCaptureClickMessage = {
   type: "capture-click";
   capture: {
     clickX: number;
@@ -18,27 +19,27 @@ type ShowhowCaptureClickMessage = {
   };
 };
 
-type ShowhowClickCapture = ShowhowCaptureClickMessage["capture"];
+export type ShowhowClickCapture = ShowhowCaptureClickMessage["capture"];
 
-type ShowhowStartRecordingMessage = {
+export type ShowhowStartRecordingMessage = {
   type: "start-recording";
   recording: ShowhowRecordingState;
 };
 
-type ShowhowStopRecordingMessage = {
+export type ShowhowStopRecordingMessage = {
   type: "stop-recording";
 };
 
-type ShowhowPingMessage = {
+export type ShowhowPingMessage = {
   type: "recording-ping";
 };
 
-type ShowhowStopRecordingResult = {
+export type ShowhowStopRecordingResult = {
   editorUrl: string;
   ok: true;
 };
 
-type ShowhowErrorResult = {
+export type ShowhowErrorResult = {
   error: string;
   ok: false;
 };

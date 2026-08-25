@@ -52,7 +52,10 @@ test("capture retry recovers when its screenshot already exists", () => {
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
     "base64",
   );
-  writeFileSync(join(dataDir, "screenshots", `${captureId}.png`), screenshot);
+  writeFileSync(
+    join(dataDir, "screenshots", `${walkthrough.id}_${captureId}.png`),
+    screenshot,
+  );
 
   const step = createStep(walkthrough.id, {
     captureId,
@@ -69,6 +72,62 @@ test("capture retry recovers when its screenshot already exists", () => {
 
   assert.equal(step.captureId, captureId);
   assert.deepEqual(listSteps(walkthrough.id), [step]);
+});
+
+test("failed Step insert does not leave an orphaned screenshot", () => {
+  const walkthrough = createWalkthrough("Rejected capture");
+  const capture = {
+    captureId: "55555555-5555-4555-8555-555555555555",
+    clickX: 1,
+    clickY: 1,
+    elementLabel: "button Existing",
+    elementRect: { height: 1, width: 1, x: 0, y: 0 },
+    pageUrl: "https://example.test/existing",
+    screenshotDataUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    sequence: 1,
+    viewportHeight: 100,
+    viewportWidth: 100,
+  };
+  createStep(walkthrough.id, capture);
+
+  const rejectedCaptureId = "66666666-6666-4666-8666-666666666666";
+  assert.throws(() =>
+    createStep(walkthrough.id, {
+      ...capture,
+      captureId: rejectedCaptureId,
+    }),
+  );
+  assert.equal(
+    existsSync(
+      join(
+        dataDir,
+        "screenshots",
+        `${walkthrough.id}_${rejectedCaptureId}.png`,
+      ),
+    ),
+    false,
+  );
+});
+
+test("declared image type must match the screenshot bytes", () => {
+  const walkthrough = createWalkthrough("Invalid image");
+
+  assert.throws(() =>
+    createStep(walkthrough.id, {
+      captureId: "77777777-7777-4777-8777-777777777777",
+      clickX: 1,
+      clickY: 1,
+      elementLabel: "button Invalid",
+      elementRect: { height: 1, width: 1, x: 0, y: 0 },
+      pageUrl: "https://example.test/invalid",
+      screenshotDataUrl: `data:image/png;base64,${Buffer.from("<html>").toString("base64")}`,
+      sequence: 1,
+      viewportHeight: 100,
+      viewportWidth: 100,
+    }),
+  );
+  assert.deepEqual(listSteps(walkthrough.id), []);
 });
 
 test("API stores a captured Step and serves its screenshot", async () => {
@@ -111,6 +170,10 @@ test("API stores a captured Step and serves its screenshot", async () => {
   assert.equal(
     screenshotResponse.headers.get("cache-control"),
     "public, max-age=31536000, immutable",
+  );
+  assert.equal(
+    screenshotResponse.headers.get("x-content-type-options"),
+    "nosniff",
   );
 
   const invalidResponse = await getScreenshot(

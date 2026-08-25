@@ -1,11 +1,34 @@
 import {
   CaptureQueueStoppedError,
+  isRecordedTab,
   retryUpload,
   SerialCaptureQueue,
 } from "./capture-queue.js";
+import {
+  createFrameKey,
+  decryptFrameCapture,
+  type EncryptedFrameCapture,
+  encryptFrameCapture,
+} from "./frame-message.js";
+import type {
+  ShowhowCaptureClickMessage,
+  ShowhowClickCapture,
+  ShowhowRecordingState,
+  ShowhowStopRecordingResult,
+} from "./types.js";
 
 let captureQueue = new SerialCaptureQueue(500);
+const frameKeys = new Map<number, string>();
 let stopping: Promise<ShowhowStopRecordingResult> | undefined;
+
+function frameKey(tabId: number): string {
+  let key = frameKeys.get(tabId);
+  if (!key) {
+    key = createFrameKey();
+    frameKeys.set(tabId, key);
+  }
+  return key;
+}
 
 function extensionMessage(
   message: unknown,
@@ -56,7 +79,7 @@ async function captureStep(
       }
 
       const [activeTab] = await chrome.tabs.query({ active: true, windowId });
-      if (activeTab?.id !== sourceTabId) {
+      if (!isRecordedTab(recording.tabId, sourceTabId, activeTab?.id)) {
         throw new Error("The recorded tab is no longer active.");
       }
 
@@ -64,6 +87,13 @@ async function captureStep(
       const screenshotDataUrl = await chrome.tabs.captureVisibleTab(windowId, {
         format: "png",
       });
+      const [stillActiveTab] = await chrome.tabs.query({
+        active: true,
+        windowId,
+      });
+      if (!isRecordedTab(recording.tabId, sourceTabId, stillActiveTab?.id)) {
+        throw new Error("The recorded tab is no longer active.");
+      }
       const body = JSON.stringify({
         ...message.capture,
         captureId,
@@ -106,6 +136,7 @@ async function captureStep(
 
 async function startRecording(recording: ShowhowRecordingState) {
   captureQueue = new SerialCaptureQueue(500);
+  frameKeys.delete(recording.tabId);
   stopping = undefined;
   await chrome.storage.local.remove(["captureError", "lastStop"]);
   await chrome.storage.local.set({ recording, serverUrl: recording.serverUrl });
@@ -151,6 +182,7 @@ async function stopRecording(): Promise<ShowhowStopRecordingResult> {
     };
 
     await chrome.storage.local.remove("recording");
+    frameKeys.delete(recording.tabId);
     await chrome.storage.local.set({ lastStop: result });
     if (typeof captureError !== "string") {
       await chrome.action.setBadgeText({ text: "" });
@@ -172,6 +204,31 @@ chrome.runtime.onMessage.addListener(
     const received = extensionMessage(message);
     if (!received) {
       return false;
+    }
+
+    if (
+      received.type === "encrypt-frame-capture" &&
+      sender.tab?.id !== undefined &&
+      "capture" in received
+    ) {
+      encryptFrameCapture(received.capture, frameKey(sender.tab.id))
+        .then((message) => sendResponse({ message }))
+        .catch(() => sendResponse({}));
+      return true;
+    }
+
+    if (
+      received.type === "decrypt-frame-capture" &&
+      sender.tab?.id !== undefined &&
+      "message" in received
+    ) {
+      decryptFrameCapture<ShowhowClickCapture>(
+        received.message as EncryptedFrameCapture,
+        frameKey(sender.tab.id),
+      )
+        .then((capture) => sendResponse({ capture }))
+        .catch(() => sendResponse({}));
+      return true;
     }
 
     if (received.type === "capture-click" && "capture" in received) {

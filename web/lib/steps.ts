@@ -20,6 +20,16 @@ export type StepCapture = {
 
 export class InvalidStepCaptureError extends Error {}
 export class InvalidStepContentError extends Error {}
+export class InvalidStepOrderError extends Error {}
+
+const maxScreenshotBytes = 15 * 1024 * 1024;
+const maxScreenshotDataUrlLength = Math.ceil(maxScreenshotBytes / 3) * 4 + 32;
+
+function hasScreenshotSignature(bytes: Buffer, type: string): boolean {
+  return type === "png"
+    ? bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))
+    : bytes.subarray(0, 3).equals(Buffer.from("ffd8ff", "hex"));
+}
 
 export function createStep(walkthroughId: string, capture: StepCapture): Step {
   const existing = db
@@ -37,19 +47,32 @@ export function createStep(walkthroughId: string, capture: StepCapture): Step {
     return existing;
   }
 
-  const screenshot = /^data:image\/(png|jpeg);base64,([a-z0-9+/=]+)$/i.exec(
-    capture.screenshotDataUrl,
-  );
+  const screenshot =
+    capture.screenshotDataUrl.length <= maxScreenshotDataUrlLength
+      ? /^data:image\/(png|jpeg);base64,([a-z0-9+/=]+)$/i.exec(
+          capture.screenshotDataUrl,
+        )
+      : null;
 
-  if (!screenshot || !/^[a-f0-9-]{36}$/i.test(capture.captureId)) {
+  if (
+    !screenshot ||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(
+      capture.captureId,
+    )
+  ) {
     throw new InvalidStepCaptureError();
   }
 
-  const extension = screenshot[1] === "jpeg" ? "jpg" : "png";
-  const screenshotFile = `${capture.captureId}.${extension}`;
+  const screenshotType = screenshot[1].toLowerCase();
+  const extension = screenshotType === "jpeg" ? "jpg" : "png";
+  const screenshotFile = `${walkthroughId}_${capture.captureId.toLowerCase()}.${extension}`;
   const bytes = Buffer.from(screenshot[2], "base64");
 
-  if (bytes.length === 0 || bytes.length > 15 * 1024 * 1024) {
+  if (
+    bytes.length === 0 ||
+    bytes.length > maxScreenshotBytes ||
+    !hasScreenshotSignature(bytes, screenshotType)
+  ) {
     throw new InvalidStepCaptureError();
   }
 
@@ -57,9 +80,11 @@ export function createStep(walkthroughId: string, capture: StepCapture): Step {
     /* turbopackIgnore: true */ screenshotsDir,
     screenshotFile,
   );
+  let createdScreenshot = false;
 
   try {
     writeFileSync(screenshotPath, bytes, { flag: "wx" });
+    createdScreenshot = true;
   } catch (error) {
     const fileError = error as NodeJS.ErrnoException;
     if (fileError.code !== "EEXIST") {
@@ -70,30 +95,44 @@ export function createStep(walkthroughId: string, capture: StepCapture): Step {
     }
   }
 
-  return db
-    .insert(steps)
-    .values({
-      id: randomUUID(),
-      walkthroughId,
-      captureId: capture.captureId,
-      sequence: capture.sequence,
-      screenshotFile,
-      pageUrl: capture.pageUrl,
-      elementLabel: capture.elementLabel,
-      title: capture.elementLabel,
-      description: capture.elementLabel,
-      clickX: capture.clickX,
-      clickY: capture.clickY,
-      viewportWidth: capture.viewportWidth,
-      viewportHeight: capture.viewportHeight,
-      rectX: capture.elementRect.x,
-      rectY: capture.elementRect.y,
-      rectWidth: capture.elementRect.width,
-      rectHeight: capture.elementRect.height,
-      createdAt: new Date(),
-    })
-    .returning()
-    .get();
+  try {
+    return db
+      .insert(steps)
+      .values({
+        id: randomUUID(),
+        walkthroughId,
+        captureId: capture.captureId,
+        sequence: capture.sequence,
+        screenshotFile,
+        pageUrl: capture.pageUrl,
+        elementLabel: capture.elementLabel,
+        title: capture.elementLabel,
+        description: capture.elementLabel,
+        clickX: capture.clickX,
+        clickY: capture.clickY,
+        viewportWidth: capture.viewportWidth,
+        viewportHeight: capture.viewportHeight,
+        rectX: capture.elementRect.x,
+        rectY: capture.elementRect.y,
+        rectWidth: capture.elementRect.width,
+        rectHeight: capture.elementRect.height,
+        createdAt: new Date(),
+      })
+      .returning()
+      .get();
+  } catch (error) {
+    if (createdScreenshot) {
+      try {
+        unlinkSync(screenshotPath);
+      } catch (cleanupError) {
+        console.error(
+          "Unable to remove orphaned Step screenshot.",
+          cleanupError,
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 export function listSteps(walkthroughId: string): Step[] {
@@ -177,6 +216,39 @@ export function moveStep(
       .returning()
       .get();
   });
+}
+
+export function reorderSteps(walkthroughId: string, stepIds: string[]): Step[] {
+  const current = listSteps(walkthroughId);
+  const currentIds = new Set(current.map((step) => step.id));
+
+  if (
+    stepIds.length !== current.length ||
+    new Set(stepIds).size !== stepIds.length ||
+    stepIds.some((stepId) => !currentIds.has(stepId))
+  ) {
+    throw new InvalidStepOrderError();
+  }
+
+  db.transaction((transaction) => {
+    transaction
+      .update(steps)
+      .set({ sequence: sql`-${steps.sequence}` })
+      .where(eq(steps.walkthroughId, walkthroughId))
+      .run();
+
+    for (const [index, stepId] of stepIds.entries()) {
+      transaction
+        .update(steps)
+        .set({ sequence: index + 1 })
+        .where(
+          and(eq(steps.walkthroughId, walkthroughId), eq(steps.id, stepId)),
+        )
+        .run();
+    }
+  });
+
+  return listSteps(walkthroughId);
 }
 
 export function deleteStep(walkthroughId: string, stepId: string): boolean {

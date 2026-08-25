@@ -28,16 +28,20 @@ after(() => {
 
 test("views are counted and completion retries are idempotent", () => {
   const walkthrough = createWalkthrough("Stats");
+  const otherWalkthrough = createWalkthrough("Other stats");
+  const sharedCompletionId = "11111111-1111-4111-8111-111111111111";
 
   recordView(walkthrough.id);
   recordView(walkthrough.id);
-  recordCompletion(walkthrough.id, "11111111-1111-4111-8111-111111111111");
-  recordCompletion(walkthrough.id, "11111111-1111-4111-8111-111111111111");
+  recordCompletion(walkthrough.id, sharedCompletionId);
+  recordCompletion(walkthrough.id, sharedCompletionId);
   recordCompletion(walkthrough.id, "22222222-2222-4222-8222-222222222222");
+  recordCompletion(otherWalkthrough.id, sharedCompletionId);
 
   const counted = findWalkthroughById(walkthrough.id);
   assert.equal(counted?.views, 2);
   assert.equal(counted?.completions, 2);
+  assert.equal(findWalkthroughById(otherWalkthrough.id)?.completions, 1);
 });
 
 test("Walkthrough export contains ordered capture data", () => {

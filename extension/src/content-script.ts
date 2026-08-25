@@ -1,3 +1,13 @@
+import {
+  claimEncryptedFrameCapture,
+  normalizeEncryptedFrameCapture,
+  releaseEncryptedFrameCapture,
+} from "./frame-message.js";
+import type {
+  ShowhowCaptureClickMessage,
+  ShowhowClickCapture,
+} from "./types.js";
+
 function elementLabel(element: Element): string {
   const tag = element.tagName.toLowerCase();
   const description =
@@ -8,25 +18,26 @@ function elementLabel(element: Element): string {
   return `${tag} ${description}`.trim().slice(0, 160);
 }
 
-type FrameCaptureMessage = {
-  type: "showhow-frame-capture";
-  capture: ShowhowClickCapture;
-};
+const seenFrameMessages = new Set<string>();
 
-function forwardCapture(capture: ShowhowClickCapture) {
+async function forwardCapture(capture: ShowhowClickCapture) {
   if (window === window.top) {
     const message: ShowhowCaptureClickMessage = {
       type: "capture-click",
       capture,
     };
-    void chrome.runtime.sendMessage(message).catch(() => undefined);
+    await chrome.runtime.sendMessage(message);
     return;
   }
 
-  const message: FrameCaptureMessage = {
-    type: "showhow-frame-capture",
+  const response: { message?: unknown } = await chrome.runtime.sendMessage({
     capture,
-  };
+    type: "encrypt-frame-capture",
+  });
+  const message = normalizeEncryptedFrameCapture(response.message);
+  if (!message) {
+    throw new Error("Unable to secure iframe capture data.");
+  }
   window.parent.postMessage(message, "*");
 }
 
@@ -44,10 +55,10 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
-window.addEventListener("message", (event) => {
-  const message = event.data as Partial<FrameCaptureMessage> | undefined;
+window.addEventListener("message", async (event) => {
+  const candidate = normalizeEncryptedFrameCapture(event.data);
 
-  if (message?.type !== "showhow-frame-capture" || !message.capture) {
+  if (!candidate) {
     return;
   }
 
@@ -58,13 +69,33 @@ window.addEventListener("message", (event) => {
   if (!iframe) {
     return;
   }
+  const message = claimEncryptedFrameCapture(seenFrameMessages, candidate);
+  if (!message) {
+    return;
+  }
+
+  let capture: ShowhowClickCapture;
+  try {
+    const response: { capture?: ShowhowClickCapture } =
+      await chrome.runtime.sendMessage({
+        message,
+        type: "decrypt-frame-capture",
+      });
+    if (!response.capture) {
+      throw new Error("Unable to authenticate iframe capture data.");
+    }
+    capture = response.capture;
+  } catch {
+    releaseEncryptedFrameCapture(seenFrameMessages, message);
+    return;
+  }
 
   const frameRect = iframe.getBoundingClientRect();
   if (
     iframe.offsetWidth === 0 ||
     iframe.offsetHeight === 0 ||
-    message.capture.viewportWidth === 0 ||
-    message.capture.viewportHeight === 0
+    capture.viewportWidth === 0 ||
+    capture.viewportHeight === 0
   ) {
     return;
   }
@@ -72,31 +103,34 @@ window.addEventListener("message", (event) => {
   const borderScaleX = frameRect.width / iframe.offsetWidth;
   const borderScaleY = frameRect.height / iframe.offsetHeight;
   const contentScaleX =
-    (iframe.clientWidth * borderScaleX) / message.capture.viewportWidth;
+    (iframe.clientWidth * borderScaleX) / capture.viewportWidth;
   const contentScaleY =
-    (iframe.clientHeight * borderScaleY) / message.capture.viewportHeight;
+    (iframe.clientHeight * borderScaleY) / capture.viewportHeight;
   const contentX = frameRect.x + iframe.clientLeft * borderScaleX;
   const contentY = frameRect.y + iframe.clientTop * borderScaleY;
 
-  forwardCapture({
-    ...message.capture,
-    clickX: contentX + message.capture.clickX * contentScaleX,
-    clickY: contentY + message.capture.clickY * contentScaleY,
+  void forwardCapture({
+    ...capture,
+    clickX: contentX + capture.clickX * contentScaleX,
+    clickY: contentY + capture.clickY * contentScaleY,
     elementRect: {
-      ...message.capture.elementRect,
-      height: message.capture.elementRect.height * contentScaleY,
-      width: message.capture.elementRect.width * contentScaleX,
-      x: contentX + message.capture.elementRect.x * contentScaleX,
-      y: contentY + message.capture.elementRect.y * contentScaleY,
+      ...capture.elementRect,
+      height: capture.elementRect.height * contentScaleY,
+      width: capture.elementRect.width * contentScaleX,
+      x: contentX + capture.elementRect.x * contentScaleX,
+      y: contentY + capture.elementRect.y * contentScaleY,
     },
     viewportHeight: window.innerHeight,
     viewportWidth: window.innerWidth,
-  });
+  }).catch(() => undefined);
 });
 
 document.addEventListener(
   "click",
   (event) => {
+    if (!event.isTrusted) {
+      return;
+    }
     const element = event.target instanceof Element ? event.target : null;
 
     if (!element) {
@@ -104,7 +138,7 @@ document.addEventListener(
     }
 
     const rect = element.getBoundingClientRect();
-    forwardCapture({
+    void forwardCapture({
       clickX: event.clientX,
       clickY: event.clientY,
       elementLabel: elementLabel(element),
@@ -117,7 +151,7 @@ document.addEventListener(
       pageUrl: location.href,
       viewportHeight: window.innerHeight,
       viewportWidth: window.innerWidth,
-    });
+    }).catch(() => undefined);
   },
   true,
 );

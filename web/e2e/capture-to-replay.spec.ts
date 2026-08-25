@@ -42,6 +42,11 @@ test("capture payload persists and completes a public Replay", async ({
     true,
   );
 
+  await page.goto("/");
+  await page.getByRole("link", { name: `Edit ${title}` }).click();
+  await expect(page).toHaveURL(`/edit/${walkthrough.id}`);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
   await page.goto(`/w/${walkthrough.slug}`);
   await page.getByRole("button", { name: "Start Walkthrough" }).click();
   await expect(page.getByText("Step 1 of 1")).toBeVisible();
@@ -60,4 +65,83 @@ test("capture payload persists and completes a public Replay", async ({
       return stats;
     })
     .toEqual({ completions: 1, views: 1 });
+});
+
+test("editor directory reorders Steps by drag and drop", async ({
+  page,
+  request,
+}) => {
+  const createResponse = await request.post("/api/walkthroughs", {
+    data: { title: "Drag Step order" },
+  });
+  const { walkthrough } = await createResponse.json();
+  const labels = ["button First", "button Second"];
+
+  for (const [index, elementLabel] of labels.entries()) {
+    const response = await request.post(
+      `/api/walkthroughs/${walkthrough.id}/steps`,
+      {
+        data: {
+          captureId: crypto.randomUUID(),
+          clickX: 10,
+          clickY: 10,
+          elementLabel,
+          elementRect: { height: 20, width: 40, x: 0, y: 0 },
+          pageUrl: `https://example.test/${index + 1}`,
+          screenshotDataUrl:
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          sequence: index + 1,
+          viewportHeight: 100,
+          viewportWidth: 100,
+        },
+      },
+    );
+    expect(response.status()).toBe(201);
+  }
+
+  await page.goto(`/edit/${walkthrough.id}`);
+  const directory = page.getByRole("navigation", { name: "Step directory" });
+  const first = directory.getByRole("button", {
+    name: "Step 1: button First",
+  });
+  const second = directory.getByRole("button", {
+    name: "Step 2: button Second",
+  });
+  const firstBounds = await first.boundingBox();
+  const secondBounds = await second.boundingBox();
+  if (!firstBounds || !secondBounds) {
+    throw new Error("Step directory items are not visible.");
+  }
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await second.dispatchEvent("dragstart", { dataTransfer });
+  await expect(second).toHaveClass(/border-dashed/);
+  const clientY = firstBounds.y + firstBounds.height / 2;
+  await first.dispatchEvent("dragover", { clientY, dataTransfer });
+  const insertLine = page.getByTestId("step-insert-line");
+  await expect(insertLine).toBeVisible();
+  await expect
+    .poll(() =>
+      insertLine.evaluate((element) => element.getBoundingClientRect().height),
+    )
+    .toBe(2);
+  await expect
+    .poll(() =>
+      first.evaluate((element) => {
+        const transform = getComputedStyle(
+          element.parentElement as HTMLElement,
+        ).transform;
+        return new DOMMatrix(transform).m42;
+      }),
+    )
+    .not.toBe(0);
+  await first.dispatchEvent("drop", { clientY, dataTransfer });
+  await second.dispatchEvent("dragend", { dataTransfer });
+
+  await expect(directory.getByRole("button").first()).toHaveAccessibleName(
+    "Step 1: button Second",
+  );
+  await page.reload();
+  await expect(directory.getByRole("button").first()).toHaveAccessibleName(
+    "Step 1: button Second",
+  );
 });

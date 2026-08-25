@@ -21,6 +21,9 @@ const { DELETE: deleteStepRoute, PATCH: patchStep } = await import(
 const { POST: moveStepRoute } = await import(
   "../app/api/walkthroughs/[id]/steps/[stepId]/move/route"
 );
+const { POST: reorderStepsRoute } = await import(
+  "../app/api/walkthroughs/[id]/steps/reorder/route"
+);
 const screenshotDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
@@ -149,10 +152,38 @@ test("editor API saves, moves, and deletes", async () => {
   assert.equal(moveResponse.status, 200);
   assert.equal(listSteps(walkthrough.id)[0].id, second.id);
 
+  const reorderResponse = await reorderStepsRoute(
+    new Request("http://showhow.test", {
+      body: JSON.stringify({ stepIds: [first.id, second.id] }),
+      method: "POST",
+    }),
+    params,
+  );
+  assert.equal(reorderResponse.status, 200);
+  assert.deepEqual(
+    listSteps(walkthrough.id).map((step) => step.id),
+    [first.id, second.id],
+  );
+
   const deleteResponse = await deleteStepRoute(
     new Request("http://showhow.test", { method: "DELETE" }),
     stepParams,
   );
   assert.equal(deleteResponse.status, 204);
   assert.equal(listSteps(walkthrough.id).length, 1);
+});
+
+test("deleting a Step keeps another Walkthrough's screenshot", () => {
+  const firstWalkthrough = createWalkthrough("First Walkthrough");
+  const secondWalkthrough = createWalkthrough("Second Walkthrough");
+  const sharedCaptureId = "99999999-9999-4999-8999-999999999999";
+  const first = captureStep(firstWalkthrough.id, 1, sharedCaptureId);
+  const second = captureStep(secondWalkthrough.id, 1, sharedCaptureId);
+
+  assert.notEqual(first.screenshotFile, second.screenshotFile);
+  deleteStep(secondWalkthrough.id, second.id);
+  assert.equal(
+    existsSync(join(dataDir, "screenshots", first.screenshotFile)),
+    true,
+  );
 });

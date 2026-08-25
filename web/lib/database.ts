@@ -6,7 +6,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "@/db/schema";
 
 const dataDir = resolve(
-  /* turbopackIgnore: true */ process.env.DATA_DIR ?? "./data",
+  /* turbopackIgnore: true */ process.env.DATA_DIR || "./data",
 );
 export const screenshotsDir = join(dataDir, "screenshots");
 mkdirSync(screenshotsDir, { recursive: true });

@@ -1,6 +1,19 @@
 .agents/
 node_modules/
+/web/.next/
+/web/.next-e2e/
+/web/data/
+/web/next-env.d.ts
 /extension/dist/
+*.tsbuildinfo
+
+# local operating-system and tool output
+.DS_Store
+*.pem
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # environment files
 .env*

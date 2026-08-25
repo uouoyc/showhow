@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "tsc --project tsconfig.json && esbuild src/content-script.ts --bundle --format=iife --outfile=dist/content-script.js",
+    "format": "pnpm --dir .. exec biome format --write extension",
+    "lint": "pnpm --dir .. exec biome check extension",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "devDependencies": {
     "@types/chrome": "^0.2.7",
+    "esbuild": "^0.25.12",
     "tsx": "^4.23.12",
     "typescript": "^5.9.3"
   }

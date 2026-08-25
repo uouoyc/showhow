@@ -10,6 +10,8 @@ WORKDIR /app
 
 FROM base AS dependencies
 
+ENV npm_config_nodedir=/usr/local
+
 RUN python3 --version && make --version && g++ --version
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

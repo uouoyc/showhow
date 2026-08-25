@@ -7,8 +7,8 @@
     "dev": "next dev",
     "build": "next build && tsx scripts/prepare-standalone.ts",
     "start": "next start",
-    "lint": "biome check",
-    "format": "biome format --write",
+    "lint": "pnpm --dir .. exec biome check web",
+    "format": "pnpm --dir .. exec biome format --write web",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:e2e": "tsx scripts/run-e2e.ts",
     "typecheck": "tsc --noEmit"
@@ -22,7 +22,6 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.2",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^9.6.0",
