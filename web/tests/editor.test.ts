@@ -69,7 +69,10 @@ test("user can edit and organize captured Steps", () => {
     title: "Curated Walkthrough",
   });
   updateStep(walkthrough.id, first.id, {
+    clickX: first.clickX,
+    clickY: first.clickY,
     description: "Choose the first option.",
+    redactions: first.redactions,
     title: "Choose an option",
   });
   moveStep(walkthrough.id, second.id, "up");
@@ -130,10 +133,25 @@ test("editor API saves, moves, and deletes", async () => {
   const stepParams = {
     params: Promise.resolve({ id: walkthrough.id, stepId: first.id }),
   };
+  const incompleteStepResponse = await patchStep(
+    new Request("http://showhow.test", {
+      body: JSON.stringify({
+        description: "Incomplete layout",
+        title: "Incomplete Step",
+      }),
+      method: "PATCH",
+    }),
+    stepParams,
+  );
+  assert.equal(incompleteStepResponse.status, 400);
+
   const stepResponse = await patchStep(
     new Request("http://showhow.test", {
       body: JSON.stringify({
+        clickX: 40,
+        clickY: 60,
         description: "Saved description",
+        redactions: [{ height: 0.2, width: 0.3, x: 0.1, y: 0.15 }],
         title: "Saved Step",
       }),
       method: "PATCH",
@@ -141,6 +159,12 @@ test("editor API saves, moves, and deletes", async () => {
     stepParams,
   );
   assert.equal(stepResponse.status, 200);
+  const savedStep = listSteps(walkthrough.id)[0];
+  assert.equal(savedStep.clickX, 40);
+  assert.equal(savedStep.clickY, 60);
+  assert.deepEqual(savedStep.redactions, [
+    { height: 0.2, width: 0.3, x: 0.1, y: 0.15 },
+  ]);
 
   const moveResponse = await moveStepRoute(
     new Request("http://showhow.test", {

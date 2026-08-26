@@ -4,12 +4,11 @@ function delay(milliseconds: number) {
 
 export class CaptureQueueStoppedError extends Error {}
 
-export function isRecordedTab(
-  recordedTabId: number,
+export function isActiveSourceTab(
   sourceTabId: number,
   activeTabId: number | undefined,
 ): boolean {
-  return recordedTabId === sourceTabId && sourceTabId === activeTabId;
+  return sourceTabId === activeTabId;
 }
 
 export class SerialCaptureQueue {

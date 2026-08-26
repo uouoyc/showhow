@@ -1,9 +1,9 @@
 export type ShowhowRecordingState = {
   serverUrl: string;
   stepCount: number;
-  tabId: number;
   title: string;
   walkthroughId: string;
+  windowId: number;
 };
 
 export type ShowhowCaptureClickMessage = {

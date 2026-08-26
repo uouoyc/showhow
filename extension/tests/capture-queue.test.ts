@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  isRecordedTab,
+  isActiveSourceTab,
   retryUpload,
   SerialCaptureQueue,
 } from "../src/capture-queue";
 
-test("Recording accepts captures only from its original active tab", () => {
-  assert.equal(isRecordedTab(7, 7, 7), true);
-  assert.equal(isRecordedTab(7, 8, 8), false);
-  assert.equal(isRecordedTab(7, 7, 8), false);
+test("Recording accepts captures only from the active source tab", () => {
+  assert.equal(isActiveSourceTab(7, 7), true);
+  assert.equal(isActiveSourceTab(7, 8), false);
+  assert.equal(isActiveSourceTab(7, undefined), false);
 });
 
 test("capture queue preserves order, spacing, and stop semantics", async () => {

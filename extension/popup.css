@@ -19,6 +19,10 @@ main {
   padding: 20px;
 }
 
+[hidden] {
+  display: none;
+}
+
 h1,
 p {
   margin: 0;

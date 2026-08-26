@@ -52,7 +52,10 @@ test("finalization drafts defaults once and preserves user descriptions", async 
     "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   );
   updateStep(walkthrough.id, second.id, {
+    clickX: second.clickX,
+    clickY: second.clickY,
     description: "My custom description",
+    redactions: second.redactions,
     title: second.title,
   });
 

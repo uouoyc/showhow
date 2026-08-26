@@ -20,9 +20,12 @@ export default async function EditWalkthroughPage({
   return (
     <WalkthroughEditor
       steps={listSteps(id).map((step) => ({
+        clickX: step.clickX,
+        clickY: step.clickY,
         description: step.description,
         elementLabel: step.elementLabel,
         id: step.id,
+        redactions: step.redactions,
         screenshotFile: step.screenshotFile,
         sequence: step.sequence,
         title: step.title,

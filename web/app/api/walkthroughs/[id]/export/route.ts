@@ -1,11 +1,11 @@
-import { exportWalkthrough } from "@/lib/export";
+import { exportWalkthrough } from "@/lib/portable-walkthrough";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const exported = exportWalkthrough(id);
+  const exported = await exportWalkthrough(id);
 
   if (!exported) {
     return Response.json({ error: "Walkthrough not found." }, { status: 404 });

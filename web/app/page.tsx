@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ImportWalkthrough } from "@/app/import-walkthrough";
 import { listWalkthroughs } from "@/lib/walkthroughs";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,8 @@ export default function Home() {
         </p>
         <h1 className="text-4xl font-semibold tracking-tight">Walkthroughs</h1>
       </header>
+
+      <ImportWalkthrough />
 
       <section className="space-y-4" aria-labelledby="walkthrough-list-heading">
         {walkthroughs.length === 0 ? (

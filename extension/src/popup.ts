@@ -1,6 +1,6 @@
+import { ensureContentScript } from "./content-script-control.js";
 import type {
   ShowhowErrorResult,
-  ShowhowPingMessage,
   ShowhowRecordingState,
   ShowhowStartRecordingMessage,
   ShowhowStopRecordingMessage,
@@ -39,20 +39,6 @@ function render(recording?: ShowhowRecordingState) {
 }
 
 async function initializePopup() {
-  const stored = await chrome.storage.local.get([
-    "captureError",
-    "recording",
-    "serverUrl",
-  ]);
-  const activeRecording = stored.recording as ShowhowRecordingState | undefined;
-  serverUrlInput.value =
-    typeof stored.serverUrl === "string"
-      ? stored.serverUrl
-      : serverUrlInput.value;
-  render(activeRecording);
-  statusMessage.textContent =
-    typeof stored.captureError === "string" ? stored.captureError : "";
-
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     statusMessage.textContent = "";
@@ -71,17 +57,9 @@ async function initializePopup() {
         throw new Error("The active tab is unavailable.");
       }
 
-      try {
-        const ping: { ok?: boolean } = await chrome.tabs.sendMessage(
-          activeTab.id,
-          { type: "recording-ping" } satisfies ShowhowPingMessage,
-        );
-        if (!ping.ok) {
-          throw new Error();
-        }
-      } catch {
+      if (!(await ensureContentScript(activeTab.id))) {
         throw new Error(
-          "Showhow cannot capture this page. Reload it or open another HTTP(S) page.",
+          "Showhow cannot capture this page. Open another HTTP(S) page.",
         );
       }
 
@@ -104,9 +82,9 @@ async function initializePopup() {
       const recording: ShowhowRecordingState = {
         serverUrl,
         stepCount: 0,
-        tabId: activeTab.id,
         title,
         walkthroughId: body.walkthrough.id,
+        windowId: activeTab.windowId,
       };
 
       const started: { ok: boolean } = await chrome.runtime.sendMessage({
@@ -148,6 +126,20 @@ async function initializePopup() {
       stopButton.disabled = false;
     }
   });
+
+  const stored = await chrome.storage.local.get([
+    "captureError",
+    "recording",
+    "serverUrl",
+  ]);
+  const activeRecording = stored.recording as ShowhowRecordingState | undefined;
+  serverUrlInput.value =
+    typeof stored.serverUrl === "string"
+      ? stored.serverUrl
+      : serverUrlInput.value;
+  render(activeRecording);
+  statusMessage.textContent =
+    typeof stored.captureError === "string" ? stored.captureError : "";
 }
 
 void initializePopup();

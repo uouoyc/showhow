@@ -10,16 +10,28 @@ import {
   useRef,
   useState,
 } from "react";
+import type { Redaction } from "@/db/schema";
 
 type EditorStep = {
+  clickX: number;
+  clickY: number;
   description: string;
   elementLabel: string;
   id: string;
+  redactions: Redaction[];
   screenshotFile: string;
   sequence: number;
   title: string;
   viewportHeight: number;
   viewportWidth: number;
+};
+
+type Point = { x: number; y: number };
+
+type PositionEvent = {
+  clientX: number;
+  clientY: number;
+  currentTarget: HTMLElement;
 };
 
 type EditorWalkthrough = {
@@ -53,6 +65,258 @@ function InsertLine() {
         <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-blue-500" />
       </span>
     </li>
+  );
+}
+
+function pointerPosition(event: PositionEvent): Point {
+  const bounds = event.currentTarget.getBoundingClientRect();
+  return {
+    x: Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)),
+    y: Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height)),
+  };
+}
+
+function redactionBetween(start: Point, end: Point): Redaction {
+  return {
+    height: Math.abs(end.y - start.y),
+    width: Math.abs(end.x - start.x),
+    x: Math.min(start.x, end.x),
+    y: Math.min(start.y, end.y),
+  };
+}
+
+function StepScreenshotEditor({ step }: { step: EditorStep }) {
+  const dragStart = useRef<Point | null>(null);
+  const [clickX, setClickX] = useState(step.clickX);
+  const [clickY, setClickY] = useState(step.clickY);
+  const [draft, setDraft] = useState<Redaction | null>(null);
+  const [mode, setMode] = useState<"hotspot" | "redaction">("hotspot");
+  const [redactions, setRedactions] = useState(step.redactions);
+
+  function moveHotspot(point: Point) {
+    setClickX(point.x * step.viewportWidth);
+    setClickY(point.y * step.viewportHeight);
+  }
+
+  function updateRedaction(
+    index: number,
+    field: keyof Redaction,
+    percentage: number,
+  ) {
+    if (!Number.isFinite(percentage)) {
+      return;
+    }
+    setRedactions((current) =>
+      current.map((redaction, currentIndex) => {
+        if (currentIndex !== index) {
+          return redaction;
+        }
+        const value = Math.min(1, Math.max(0, percentage / 100));
+        if (field === "x" || field === "y") {
+          const size = field === "x" ? redaction.width : redaction.height;
+          return { ...redaction, [field]: Math.min(value, 1 - size) };
+        }
+        const position = field === "width" ? redaction.x : redaction.y;
+        return {
+          ...redaction,
+          [field]: Math.min(Math.max(0.01, value), 1 - position),
+        };
+      }),
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap gap-2">
+        <button
+          aria-pressed={mode === "hotspot"}
+          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm aria-pressed:bg-zinc-950 aria-pressed:text-white dark:border-zinc-700 dark:aria-pressed:bg-white dark:aria-pressed:text-black"
+          onClick={() => setMode("hotspot")}
+          type="button"
+        >
+          Move Hotspot
+        </button>
+        <button
+          aria-pressed={mode === "redaction"}
+          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm aria-pressed:bg-zinc-950 aria-pressed:text-white dark:border-zinc-700 dark:aria-pressed:bg-white dark:aria-pressed:text-black"
+          disabled={redactions.length >= 20}
+          onClick={() => setMode("redaction")}
+          type="button"
+        >
+          Draw redaction
+        </button>
+        <button
+          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm disabled:opacity-40 dark:border-zinc-700"
+          disabled={redactions.length >= 20}
+          onClick={() =>
+            setRedactions((current) => [
+              ...current,
+              { height: 0.2, width: 0.2, x: 0.4, y: 0.4 },
+            ])
+          }
+          type="button"
+        >
+          Add centered redaction
+        </button>
+      </div>
+      <button
+        aria-label="Edit Step screenshot layout"
+        className={`relative overflow-hidden rounded-xl bg-black ${mode === "redaction" ? "cursor-crosshair touch-none" : "cursor-pointer"}`}
+        data-testid="step-screenshot-editor"
+        onClick={(event) => {
+          if (mode === "hotspot" && event.detail > 0) {
+            moveHotspot(pointerPosition(event));
+          }
+        }}
+        onPointerDown={(event) => {
+          if (mode !== "redaction") {
+            return;
+          }
+          event.currentTarget.setPointerCapture(event.pointerId);
+          dragStart.current = pointerPosition(event);
+          setDraft(redactionBetween(dragStart.current, dragStart.current));
+        }}
+        onPointerMove={(event) => {
+          if (dragStart.current) {
+            setDraft(
+              redactionBetween(dragStart.current, pointerPosition(event)),
+            );
+          }
+        }}
+        onPointerUp={(event) => {
+          const start = dragStart.current;
+          dragStart.current = null;
+          setDraft(null);
+          if (!start || redactions.length >= 20) {
+            return;
+          }
+          const redaction = redactionBetween(start, pointerPosition(event));
+          if (redaction.width >= 0.01 && redaction.height >= 0.01) {
+            setRedactions((current) => [...current, redaction]);
+          }
+        }}
+        type="button"
+      >
+        <Image
+          alt={`Step ${step.sequence}: ${step.elementLabel}`}
+          className="block h-auto w-full"
+          draggable={false}
+          height={step.viewportHeight}
+          src={`/api/screens/${step.screenshotFile}`}
+          unoptimized
+          width={step.viewportWidth}
+        />
+        {[...redactions, ...(draft ? [draft] : [])].map((redaction) => (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute bg-black/90"
+            data-testid="editor-redaction"
+            key={`${redaction.x}-${redaction.y}-${redaction.width}-${redaction.height}`}
+            style={{
+              height: `${redaction.height * 100}%`,
+              left: `${redaction.x * 100}%`,
+              top: `${redaction.y * 100}%`,
+              width: `${redaction.width * 100}%`,
+            }}
+          />
+        ))}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-3 border-white bg-blue-600 shadow-lg"
+          data-testid="editor-hotspot"
+          style={{
+            left: `${(clickX / step.viewportWidth) * 100}%`,
+            top: `${(clickY / step.viewportHeight) * 100}%`,
+          }}
+        />
+      </button>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-1 text-sm font-medium">
+          Hotspot X
+          <input
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 font-normal dark:border-zinc-700 dark:bg-black"
+            max={step.viewportWidth}
+            min={0}
+            name="clickX"
+            onChange={(event) => setClickX(event.currentTarget.valueAsNumber)}
+            step="any"
+            type="number"
+            value={clickX}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">
+          Hotspot Y
+          <input
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 font-normal dark:border-zinc-700 dark:bg-black"
+            max={step.viewportHeight}
+            min={0}
+            name="clickY"
+            onChange={(event) => setClickY(event.currentTarget.valueAsNumber)}
+            step="any"
+            type="number"
+            value={clickY}
+          />
+        </label>
+      </div>
+      <input
+        name="redactions"
+        type="hidden"
+        value={JSON.stringify(redactions)}
+      />
+      {redactions.length > 0 ? (
+        <div className="grid gap-3">
+          {redactions.map((redaction, index) => (
+            <fieldset
+              className="grid gap-3 rounded-xl border border-zinc-300 p-3 sm:grid-cols-4 dark:border-zinc-700"
+              key={`${index}-${redaction.x}-${redaction.y}`}
+            >
+              <legend className="px-1 text-sm font-medium">
+                Redaction {index + 1}
+              </legend>
+              {(["x", "y", "width", "height"] as const).map((field) => (
+                <label className="grid gap-1 text-xs font-medium" key={field}>
+                  Redaction {index + 1} {field.toUpperCase()} (%)
+                  <input
+                    className="rounded-lg border border-zinc-300 bg-white px-3 py-2 font-normal dark:border-zinc-700 dark:bg-black"
+                    max={
+                      (field === "x"
+                        ? 1 - redaction.width
+                        : field === "y"
+                          ? 1 - redaction.height
+                          : field === "width"
+                            ? 1 - redaction.x
+                            : 1 - redaction.y) * 100
+                    }
+                    min={field === "width" || field === "height" ? 1 : 0}
+                    onChange={(event) =>
+                      updateRedaction(
+                        index,
+                        field,
+                        event.currentTarget.valueAsNumber,
+                      )
+                    }
+                    step="any"
+                    type="number"
+                    value={Number((redaction[field] * 100).toFixed(2))}
+                  />
+                </label>
+              ))}
+              <button
+                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm sm:col-span-4 dark:border-zinc-700"
+                onClick={() =>
+                  setRedactions((current) =>
+                    current.filter((_, currentIndex) => currentIndex !== index),
+                  )
+                }
+                type="button"
+              >
+                Remove redaction {index + 1}
+              </button>
+            </fieldset>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -119,7 +383,10 @@ export function WalkthroughEditor({
         `/api/walkthroughs/${walkthrough.id}/steps/${stepId}`,
         {
           body: JSON.stringify({
+            clickX: Number(data.get("clickX")),
+            clickY: Number(data.get("clickY")),
             description: data.get("description"),
+            redactions: JSON.parse(String(data.get("redactions"))),
             title: data.get("title"),
           }),
           headers: { "content-type": "application/json" },
@@ -438,18 +705,11 @@ export function WalkthroughEditor({
                 id={`step-${step.id}`}
                 key={step.id}
               >
-                <Image
-                  alt={`Step ${step.sequence}: ${step.elementLabel}`}
-                  className="block h-auto w-full"
-                  height={step.viewportHeight}
-                  src={`/api/screens/${step.screenshotFile}`}
-                  unoptimized
-                  width={step.viewportWidth}
-                />
                 <form
                   className="grid gap-4 p-5"
                   onSubmit={(event) => saveStep(event, step.id)}
                 >
+                  <StepScreenshotEditor step={step} />
                   <p className="text-sm text-zinc-500">Step {step.sequence}</p>
                   <a
                     className="w-fit text-sm font-medium underline underline-offset-4"

@@ -36,6 +36,13 @@
       "when": 1787581113479,
       "tag": "0004_add-stats",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1787657084277,
+      "tag": "0005_add-step-redactions",
+      "breakpoints": true
     }
   ]
 }

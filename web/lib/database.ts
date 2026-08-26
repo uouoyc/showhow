@@ -8,16 +8,21 @@ import * as schema from "@/db/schema";
 const dataDir = resolve(
   /* turbopackIgnore: true */ process.env.DATA_DIR || "./data",
 );
+const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
 export const screenshotsDir = join(dataDir, "screenshots");
-mkdirSync(screenshotsDir, { recursive: true });
+if (!isProductionBuild) {
+  mkdirSync(screenshotsDir, { recursive: true });
+}
 
-const sqlite = new Database(join(dataDir, "showhow.db"));
+const sqlite = new Database(
+  isProductionBuild ? ":memory:" : join(dataDir, "showhow.db"),
+);
 sqlite.pragma("foreign_keys = ON");
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("busy_timeout = 5000");
 
 export const db = drizzle({ client: sqlite, schema });
-if (process.env.NEXT_PHASE !== "phase-production-build") {
+if (!isProductionBuild) {
   migrate(db, { migrationsFolder: resolve(process.cwd(), "drizzle") });
 }
 

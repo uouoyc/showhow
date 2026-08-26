@@ -53,15 +53,19 @@ pnpm --filter extension build
 ### 5. 录制与发布
 
 1. 扩展连接 `http://localhost:3000`，输入标题后点击 **Start recording**
-2. 在页面上完成点击流程，点击 **Stop recording**
+2. 在同一窗口的活动 tab 间完成点击流程，点击 **Stop recording**
 3. 扩展自动打开编辑器，支持：
    - 修改 Walkthrough 标题和 CTA URL
    - 编辑每个 Step 的标题和描述
+   - 点击截图调整 Hotspot
+   - 拖拽隐私遮罩覆盖截图中的敏感区域
    - 拖拽或 Up/Down 调整 Step 顺序
    - 删除 Step、下载截图、导出 JSON
-4. 复制公开链接（`/w/[slug]`）或 iframe 嵌入代码
+4. 需要恢复或复制 Walkthrough 时，在首页导入 Showhow JSON
+5. 复制公开链接（`/w/[slug]`）或 iframe 嵌入代码
 
 CTA URL 会在读者完成最后一个 Step 后显示为 **Continue** 按钮。
+失败的 Step 上传会保留在扩展存储中，并在下一次 Recording 事件恢复，包括 MV3 service worker 重启之后。
 
 ## 项目结构
 
@@ -111,7 +115,17 @@ web/data/
 
 停止服务后，复制整个 `DATA_DIR`（包含 `showhow.db` 和 `screenshots/`）。恢复时放回原目录即可。
 
+Portable JSON 导出会包含截图，可从首页恢复。保存的遮罩会烧录到通过 HTTP 提供、下载或写入 JSON 导出的截图中；管理员控制的 `DATA_DIR` 内仍保留原始文件。
+
+导入的 JSON 文件最多包含 250 个 Step，且不能超过 256 MiB。
+
 ### 测试
+
+首次运行 MV3 扩展 E2E 前，安装 Playwright Chromium：
+
+```bash
+pnpm --filter web exec playwright install chromium
+```
 
 ```bash
 pnpm format      # 格式化
@@ -122,13 +136,11 @@ pnpm test:e2e    # E2E 测试
 pnpm build       # 构建
 ```
 
-E2E 覆盖：创建 Walkthrough、保存截图、编辑器、拖拽排序、公开 Replay、Hotspot、完成统计。
+E2E 覆盖：真实 MV3 扩展跨 tab 录制、portable import、截图保存与遮罩、编辑器、拖拽排序、公开 Replay、Hotspot、完成统计。
 
 ## 限制
 
 - 原始点击不会被阻塞或重放，截图可能已是点击后状态
 - 连续截图间隔至少 500ms
-- 扩展/service worker 重启后，待上传队列不恢复
-- Recording 绑定原始 tab，切换 tab 后的点击会被拒绝
 - 无法录制：Chrome 内部页面、Chrome Web Store、拒绝 content script 的页面
 - 跨域 iframe 点击会捕获外层页面截图；沙盒 iframe、不可访问 frame、旋转/倾斜变换可能导致截图失败或 Hotspot 偏移

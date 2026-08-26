@@ -7,7 +7,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "pnpm --recursive --if-present test",
-    "test:e2e": "pnpm --filter web test:e2e",
+    "test:e2e": "pnpm --filter extension build && pnpm --filter web test:e2e",
     "typecheck": "pnpm --recursive --if-present typecheck"
   },
   "devDependencies": {

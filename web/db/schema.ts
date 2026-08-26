@@ -6,6 +6,13 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
+export type Redaction = {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+};
+
 export const walkthroughs = sqliteTable("walkthroughs", {
   id: text().primaryKey(),
   slug: text().notNull().unique(),
@@ -43,6 +50,10 @@ export const steps = sqliteTable(
     rectY: real("rect_y").notNull(),
     rectWidth: real("rect_width").notNull(),
     rectHeight: real("rect_height").notNull(),
+    redactions: text({ mode: "json" })
+      .$type<Redaction[]>()
+      .notNull()
+      .default([]),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [

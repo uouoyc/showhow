@@ -1,9 +1,10 @@
 import {
   CaptureQueueStoppedError,
-  isRecordedTab,
+  isActiveSourceTab,
   retryUpload,
   SerialCaptureQueue,
 } from "./capture-queue.js";
+import { ensureContentScript } from "./content-script-control.js";
 import {
   createFrameKey,
   decryptFrameCapture,
@@ -20,6 +21,14 @@ import type {
 let captureQueue = new SerialCaptureQueue(500);
 const frameKeys = new Map<number, string>();
 let stopping: Promise<ShowhowStopRecordingResult> | undefined;
+const unavailableTabError = "Showhow cannot capture the active tab.";
+
+type PendingUpload = {
+  body: string;
+  sequence: number;
+  url: string;
+  walkthroughId: string;
+};
 
 function frameKey(tabId: number): string {
   let key = frameKeys.get(tabId);
@@ -44,15 +53,80 @@ function extensionMessage(
   return message as Record<string, unknown> & { type: string };
 }
 
+function isPopupSender(sender: chrome.runtime.MessageSender): boolean {
+  return !sender.tab || sender.url === chrome.runtime.getURL("popup.html");
+}
+
 async function recordingState(): Promise<ShowhowRecordingState | undefined> {
   const result = await chrome.storage.local.get("recording");
   return result.recording as ShowhowRecordingState | undefined;
+}
+
+async function resumePendingUpload(): Promise<void> {
+  const stored = await chrome.storage.local.get(["pendingUpload", "recording"]);
+  const pending = stored.pendingUpload as PendingUpload | undefined;
+
+  if (!pending) {
+    return;
+  }
+
+  await retryUpload(async () => {
+    const response = await fetch(pending.url, {
+      body: pending.body,
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new Error("Step upload failed.");
+    }
+  });
+
+  const recording = stored.recording as ShowhowRecordingState | undefined;
+  if (
+    recording?.walkthroughId === pending.walkthroughId &&
+    recording.stepCount < pending.sequence
+  ) {
+    recording.stepCount = pending.sequence;
+    await chrome.storage.local.set({ recording });
+  }
+  await chrome.storage.local.remove(["captureError", "pendingUpload"]);
 }
 
 async function setCaptureError(message: string) {
   await chrome.storage.local.set({ captureError: message });
   await chrome.action.setBadgeBackgroundColor({ color: "#b91c1c" });
   await chrome.action.setBadgeText({ text: "!" });
+}
+
+async function handleTabActivated({
+  tabId,
+  windowId,
+}: {
+  tabId: number;
+  windowId: number;
+}) {
+  const recording = await recordingState();
+  if (!recording || recording.windowId !== windowId) {
+    return;
+  }
+
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url || !/^https?:\/\//.test(tab.url)) {
+      throw new Error();
+    }
+    if (!(await ensureContentScript(tabId))) {
+      throw new Error();
+    }
+    const { captureError } = await chrome.storage.local.get("captureError");
+    if (captureError === unavailableTabError) {
+      await chrome.storage.local.remove("captureError");
+      await chrome.action.setBadgeBackgroundColor({ color: "#18181b" });
+      await chrome.action.setBadgeText({ text: String(recording.stepCount) });
+    }
+  } catch {
+    await setCaptureError(unavailableTabError);
+  }
 }
 
 async function captureStep(
@@ -73,14 +147,15 @@ async function captureStep(
 
   try {
     return await captureQueue.enqueue(async () => {
+      await resumePendingUpload();
       const recording = await recordingState();
-      if (!recording) {
+      if (!recording || recording.windowId !== windowId) {
         return;
       }
 
       const [activeTab] = await chrome.tabs.query({ active: true, windowId });
-      if (!isRecordedTab(recording.tabId, sourceTabId, activeTab?.id)) {
-        throw new Error("The recorded tab is no longer active.");
+      if (!isActiveSourceTab(sourceTabId, activeTab?.id)) {
+        return;
       }
 
       const sequence = recording.stepCount + 1;
@@ -91,8 +166,8 @@ async function captureStep(
         active: true,
         windowId,
       });
-      if (!isRecordedTab(recording.tabId, sourceTabId, stillActiveTab?.id)) {
-        throw new Error("The recorded tab is no longer active.");
+      if (!isActiveSourceTab(sourceTabId, stillActiveTab?.id)) {
+        return;
       }
       const body = JSON.stringify({
         ...message.capture,
@@ -101,26 +176,21 @@ async function captureStep(
         sequence,
       });
 
-      await retryUpload(async () => {
-        const response = await fetch(
-          `${recording.serverUrl}/api/walkthroughs/${recording.walkthroughId}/steps`,
-          {
-            body,
-            headers: { "content-type": "application/json" },
-            method: "POST",
-          },
-        );
-        if (!response.ok) {
-          throw new Error("Step upload failed.");
-        }
-      });
-
-      recording.stepCount = sequence;
-      await chrome.storage.local.set({ recording });
+      const pendingUpload: PendingUpload = {
+        body,
+        sequence,
+        url: `${recording.serverUrl}/api/walkthroughs/${recording.walkthroughId}/steps`,
+        walkthroughId: recording.walkthroughId,
+      };
+      await chrome.storage.local.set({ pendingUpload });
+      await resumePendingUpload();
+      const updatedRecording = await recordingState();
       const { captureError } = await chrome.storage.local.get("captureError");
       if (typeof captureError !== "string") {
         await chrome.action.setBadgeBackgroundColor({ color: "#18181b" });
-        await chrome.action.setBadgeText({ text: String(sequence) });
+        await chrome.action.setBadgeText({
+          text: String(updatedRecording?.stepCount ?? sequence),
+        });
       }
     });
   } catch (error) {
@@ -135,8 +205,9 @@ async function captureStep(
 }
 
 async function startRecording(recording: ShowhowRecordingState) {
+  await resumePendingUpload();
   captureQueue = new SerialCaptureQueue(500);
-  frameKeys.delete(recording.tabId);
+  frameKeys.clear();
   stopping = undefined;
   await chrome.storage.local.remove(["captureError", "lastStop"]);
   await chrome.storage.local.set({ recording, serverUrl: recording.serverUrl });
@@ -162,6 +233,7 @@ async function stopRecording(): Promise<ShowhowStopRecordingResult> {
     }
 
     await captureQueue.stop();
+    await resumePendingUpload();
     try {
       const response = await fetch(
         `${recording.serverUrl}/api/walkthroughs/${recording.walkthroughId}/finalize`,
@@ -182,7 +254,7 @@ async function stopRecording(): Promise<ShowhowStopRecordingResult> {
     };
 
     await chrome.storage.local.remove("recording");
-    frameKeys.delete(recording.tabId);
+    frameKeys.clear();
     await chrome.storage.local.set({ lastStop: result });
     if (typeof captureError !== "string") {
       await chrome.action.setBadgeText({ text: "" });
@@ -246,7 +318,7 @@ chrome.runtime.onMessage.addListener(
     if (
       received.type === "start-recording" &&
       "recording" in received &&
-      !sender.tab
+      isPopupSender(sender)
     ) {
       startRecording(received.recording as ShowhowRecordingState)
         .then(() => sendResponse({ ok: true }))
@@ -254,7 +326,7 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    if (received.type === "stop-recording" && !sender.tab) {
+    if (received.type === "stop-recording" && isPopupSender(sender)) {
       stopRecording()
         .then(sendResponse)
         .catch((error: unknown) =>
@@ -272,3 +344,5 @@ chrome.runtime.onMessage.addListener(
     return false;
   },
 );
+
+chrome.tabs.onActivated.addListener(handleTabActivated);

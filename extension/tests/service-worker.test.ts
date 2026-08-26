@@ -7,11 +7,21 @@ type RuntimeListener = (
   sendResponse: (response: unknown) => void,
 ) => boolean | undefined;
 
+type TabActivatedListener = (activeInfo: {
+  tabId: number;
+  windowId: number;
+}) => Promise<void> | void;
+
 test("runtime messages capture, upload, and stop a Recording", async () => {
   const stored: Record<string, unknown> = {};
   const requests: string[] = [];
+  const uploadedSequences: number[] = [];
+  let activeTabId = 7;
   let captures = 0;
+  let fetchFailuresRemaining = 0;
   let listener: RuntimeListener | undefined;
+  let tabActivatedListener: TabActivatedListener | undefined;
+  const injectedTabs: number[] = [];
 
   Object.defineProperty(globalThis, "chrome", {
     configurable: true,
@@ -25,6 +35,11 @@ test("runtime messages capture, upload, and stop a Recording", async () => {
           addListener: (registered: RuntimeListener) => {
             listener = registered;
           },
+        },
+      },
+      scripting: {
+        executeScript: async ({ target }: { target: { tabId: number } }) => {
+          injectedTabs.push(target.tabId);
         },
       },
       storage: {
@@ -48,18 +63,40 @@ test("runtime messages capture, upload, and stop a Recording", async () => {
         },
       },
       tabs: {
+        onActivated: {
+          addListener: (registered: TabActivatedListener) => {
+            tabActivatedListener = registered;
+          },
+        },
         captureVisibleTab: async () => {
           captures++;
           return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
         },
-        query: async () => [{ id: 7 }],
+        get: async (tabId: number) => ({
+          id: tabId,
+          url: "https://example.test",
+        }),
+        query: async () => [{ id: activeTabId }],
+        sendMessage: async (tabId: number) => {
+          if (!injectedTabs.includes(tabId)) {
+            throw new Error("Receiving end does not exist.");
+          }
+          return { ok: true };
+        },
       },
     },
   });
 
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (input, init) => {
     requests.push(String(input));
+    if (fetchFailuresRemaining > 0) {
+      fetchFailuresRemaining--;
+      return new Response(null, { status: 503 });
+    }
+    if (String(input).endsWith("/steps")) {
+      uploadedSequences.push(JSON.parse(String(init?.body)).sequence);
+    }
     return new Response(null, { status: 201 });
   };
 
@@ -89,13 +126,18 @@ test("runtime messages capture, upload, and stop a Recording", async () => {
     const recording = {
       serverUrl: "http://localhost:3000",
       stepCount: 0,
-      tabId: 7,
       title: "Runtime test",
       walkthroughId: "walkthrough-id",
+      windowId: 1,
     };
     assert.deepEqual(await dispatch({ recording, type: "start-recording" }), {
       ok: true,
     });
+    assert.ok(tabActivatedListener);
+    stored.captureError = "Showhow cannot capture the active tab.";
+    await tabActivatedListener({ tabId: 8, windowId: 1 });
+    assert.deepEqual(injectedTabs, [8]);
+    assert.equal("captureError" in stored, false);
 
     const capture = {
       clickX: 10,
@@ -124,7 +166,7 @@ test("runtime messages capture, upload, and stop a Recording", async () => {
         { capture, type: "capture-click" },
         { tab: { id: 8, windowId: 1 } },
       ),
-      { ok: false },
+      { ok: true },
     );
     assert.equal(captures, 0);
 
@@ -138,11 +180,49 @@ test("runtime messages capture, upload, and stop a Recording", async () => {
     assert.equal(captures, 1);
     assert.match(requests[0], /\/steps$/);
 
+    activeTabId = 8;
+    assert.deepEqual(
+      await dispatch(
+        { capture, type: "capture-click" },
+        { tab: { id: 8, windowId: 1 } },
+      ),
+      { ok: true },
+    );
+    assert.equal(captures, 2);
+    assert.match(requests[1], /\/steps$/);
+
+    fetchFailuresRemaining = 4;
+    assert.deepEqual(
+      await dispatch(
+        { capture, type: "capture-click" },
+        { tab: { id: 8, windowId: 1 } },
+      ),
+      { ok: false },
+    );
+    assert.equal(captures, 3);
+    assert.ok(stored.pendingUpload);
+
+    await import(
+      new URL(`../src/service-worker.ts?restart=${Date.now()}`, import.meta.url)
+        .href
+    );
+    assert.deepEqual(
+      await dispatch(
+        { capture, type: "capture-click" },
+        { tab: { id: 8, windowId: 1 } },
+      ),
+      { ok: true },
+    );
+    assert.equal(captures, 4);
+    assert.deepEqual(uploadedSequences, [1, 2, 3, 4]);
+    assert.equal("captureError" in stored, false);
+    assert.equal("pendingUpload" in stored, false);
+
     assert.deepEqual(await dispatch({ type: "stop-recording" }), {
       editorUrl: "http://localhost:3000/edit/walkthrough-id",
       ok: true,
     });
-    assert.match(requests[1], /\/finalize$/);
+    assert.match(requests.at(-1) ?? "", /\/finalize$/);
     assert.equal("recording" in stored, false);
   } finally {
     globalThis.fetch = originalFetch;

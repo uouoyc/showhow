@@ -3,13 +3,14 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
+import sharp from "sharp";
 
 const dataDir = mkdtempSync(join(tmpdir(), "showhow-step-"));
 process.env.DATA_DIR = dataDir;
 
 const { closeDatabase } = await import("../lib/database");
 const { createWalkthrough } = await import("../lib/walkthroughs");
-const { createStep, listSteps } = await import("../lib/steps");
+const { createStep, listSteps, updateStep } = await import("../lib/steps");
 const { POST } = await import("../app/api/walkthroughs/[id]/steps/route");
 const { GET: getScreenshot } = await import("../app/api/screens/[file]/route");
 
@@ -167,10 +168,7 @@ test("API stores a captured Step and serves its screenshot", async () => {
 
   assert.equal(screenshotResponse.status, 200);
   assert.equal(screenshotResponse.headers.get("content-type"), "image/png");
-  assert.equal(
-    screenshotResponse.headers.get("cache-control"),
-    "public, max-age=31536000, immutable",
-  );
+  assert.equal(screenshotResponse.headers.get("cache-control"), "no-store");
   assert.equal(
     screenshotResponse.headers.get("x-content-type-options"),
     "nosniff",
@@ -183,4 +181,66 @@ test("API stores a captured Step and serves its screenshot", async () => {
     },
   );
   assert.equal(invalidResponse.status, 404);
+});
+
+test("screenshot responses burn in saved redactions", async () => {
+  const walkthrough = createWalkthrough("Redacted screenshot");
+  const step = createStep(walkthrough.id, {
+    captureId: "88888888-8888-4888-8888-888888888888",
+    clickX: 5,
+    clickY: 5,
+    elementLabel: "button Secret",
+    elementRect: { height: 2, width: 2, x: 4, y: 4 },
+    pageUrl: "https://example.test/redacted",
+    screenshotDataUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAIAAAACUFjqAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQYlWP4jxcwjEr/xwIA+h4q5HxTIAQAAAAASUVORK5CYII=",
+    sequence: 1,
+    viewportHeight: 10,
+    viewportWidth: 10,
+  });
+  updateStep(walkthrough.id, step.id, {
+    clickX: step.clickX,
+    clickY: step.clickY,
+    description: step.description,
+    redactions: [{ height: 1, width: 0.5, x: 0, y: 0 }],
+    title: step.title,
+  });
+
+  const response = await getScreenshot(new Request("http://showhow.test"), {
+    params: Promise.resolve({ file: step.screenshotFile }),
+  });
+  const pixels = await sharp(Buffer.from(await response.arrayBuffer()))
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+
+  assert.deepEqual([...pixels.subarray(0, 3)], [0, 0, 0]);
+  assert.deepEqual([...pixels.subarray(27, 30)], [255, 255, 255]);
+});
+
+test("capture API rejects clicks outside the viewport", async () => {
+  const walkthrough = createWalkthrough("Invalid coordinates");
+  const response = await POST(
+    new Request("http://showhow.test/api/walkthroughs/steps", {
+      body: JSON.stringify({
+        captureId: "99999999-9999-4999-8999-999999999999",
+        clickX: 101,
+        clickY: 50,
+        elementLabel: "button Outside",
+        elementRect: { height: 10, width: 10, x: 95, y: 45 },
+        pageUrl: "https://example.test/outside",
+        screenshotDataUrl:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        sequence: 1,
+        viewportHeight: 100,
+        viewportWidth: 100,
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+    { params: Promise.resolve({ id: walkthrough.id }) },
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(listSteps(walkthrough.id), []);
 });

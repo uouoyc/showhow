@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
-import { type Step, steps } from "@/db/schema";
+import { type Redaction, type Step, steps } from "@/db/schema";
 import { db, screenshotsDir } from "@/lib/database";
+import { decodeScreenshotDataUrl } from "@/lib/screenshots";
 
 export type StepCapture = {
   captureId: string;
@@ -22,13 +23,99 @@ export class InvalidStepCaptureError extends Error {}
 export class InvalidStepContentError extends Error {}
 export class InvalidStepOrderError extends Error {}
 
-const maxScreenshotBytes = 15 * 1024 * 1024;
-const maxScreenshotDataUrlLength = Math.ceil(maxScreenshotBytes / 3) * 4 + 32;
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
 
-function hasScreenshotSignature(bytes: Buffer, type: string): boolean {
-  return type === "png"
-    ? bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))
-    : bytes.subarray(0, 3).equals(Buffer.from("ffd8ff", "hex"));
+export function parseStepCapture(value: unknown): StepCapture | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const capture = value as Record<string, unknown>;
+  const rect = capture.elementRect;
+  if (typeof rect !== "object" || rect === null) {
+    return undefined;
+  }
+  const elementRect = rect as Record<string, unknown>;
+  if (
+    ![
+      capture.clickX,
+      capture.clickY,
+      elementRect.height,
+      elementRect.width,
+      elementRect.x,
+      elementRect.y,
+    ].every(isFiniteNumber) ||
+    !Number.isInteger(capture.sequence) ||
+    Number(capture.sequence) < 1 ||
+    !Number.isInteger(capture.viewportHeight) ||
+    Number(capture.viewportHeight) < 1 ||
+    !Number.isInteger(capture.viewportWidth) ||
+    Number(capture.viewportWidth) < 1 ||
+    Number(capture.clickX) < 0 ||
+    Number(capture.clickX) > Number(capture.viewportWidth) ||
+    Number(capture.clickY) < 0 ||
+    Number(capture.clickY) > Number(capture.viewportHeight) ||
+    Number(elementRect.height) < 0 ||
+    Number(elementRect.width) < 0 ||
+    typeof capture.captureId !== "string" ||
+    typeof capture.elementLabel !== "string" ||
+    capture.elementLabel.trim().length === 0 ||
+    capture.elementLabel.length > 160 ||
+    typeof capture.pageUrl !== "string" ||
+    typeof capture.screenshotDataUrl !== "string"
+  ) {
+    return undefined;
+  }
+  try {
+    const pageUrl = new URL(capture.pageUrl);
+    if (pageUrl.protocol !== "http:" && pageUrl.protocol !== "https:") {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  return {
+    captureId: capture.captureId,
+    clickX: Number(capture.clickX),
+    clickY: Number(capture.clickY),
+    elementLabel: capture.elementLabel.trim(),
+    elementRect: {
+      height: Number(elementRect.height),
+      width: Number(elementRect.width),
+      x: Number(elementRect.x),
+      y: Number(elementRect.y),
+    },
+    pageUrl: capture.pageUrl,
+    screenshotDataUrl: capture.screenshotDataUrl,
+    sequence: Number(capture.sequence),
+    viewportHeight: Number(capture.viewportHeight),
+    viewportWidth: Number(capture.viewportWidth),
+  };
+}
+
+export function isValidRedactions(value: unknown): value is Redaction[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= 20 &&
+    value.every((redaction: unknown) => {
+      if (typeof redaction !== "object" || redaction === null) {
+        return false;
+      }
+      const { height, width, x, y } = redaction as Record<string, unknown>;
+      return (
+        [height, width, x, y].every(
+          (number) => typeof number === "number" && Number.isFinite(number),
+        ) &&
+        Number(height) > 0 &&
+        Number(width) > 0 &&
+        Number(x) >= 0 &&
+        Number(y) >= 0 &&
+        Number(x) + Number(width) <= 1 &&
+        Number(y) + Number(height) <= 1
+      );
+    })
+  );
 }
 
 export function createStep(walkthroughId: string, capture: StepCapture): Step {
@@ -47,12 +134,7 @@ export function createStep(walkthroughId: string, capture: StepCapture): Step {
     return existing;
   }
 
-  const screenshot =
-    capture.screenshotDataUrl.length <= maxScreenshotDataUrlLength
-      ? /^data:image\/(png|jpeg);base64,([a-z0-9+/=]+)$/i.exec(
-          capture.screenshotDataUrl,
-        )
-      : null;
+  const screenshot = decodeScreenshotDataUrl(capture.screenshotDataUrl);
 
   if (
     !screenshot ||
@@ -63,18 +145,8 @@ export function createStep(walkthroughId: string, capture: StepCapture): Step {
     throw new InvalidStepCaptureError();
   }
 
-  const screenshotType = screenshot[1].toLowerCase();
-  const extension = screenshotType === "jpeg" ? "jpg" : "png";
-  const screenshotFile = `${walkthroughId}_${capture.captureId.toLowerCase()}.${extension}`;
-  const bytes = Buffer.from(screenshot[2], "base64");
-
-  if (
-    bytes.length === 0 ||
-    bytes.length > maxScreenshotBytes ||
-    !hasScreenshotSignature(bytes, screenshotType)
-  ) {
-    throw new InvalidStepCaptureError();
-  }
+  const screenshotFile = `${walkthroughId}_${capture.captureId.toLowerCase()}.${screenshot.extension}`;
+  const { bytes } = screenshot;
 
   const screenshotPath = join(
     /* turbopackIgnore: true */ screenshotsDir,
@@ -144,10 +216,26 @@ export function listSteps(walkthroughId: string): Step[] {
     .all();
 }
 
+export function findStepByScreenshotFile(
+  screenshotFile: string,
+): Step | undefined {
+  return db
+    .select()
+    .from(steps)
+    .where(eq(steps.screenshotFile, screenshotFile))
+    .get();
+}
+
 export function updateStep(
   walkthroughId: string,
   stepId: string,
-  input: { description: unknown; title: unknown },
+  input: {
+    clickX: unknown;
+    clickY: unknown;
+    description: unknown;
+    redactions: unknown;
+    title: unknown;
+  },
 ): Step | undefined {
   if (
     typeof input.title !== "string" ||
@@ -159,9 +247,39 @@ export function updateStep(
     throw new InvalidStepContentError();
   }
 
+  const current = db
+    .select()
+    .from(steps)
+    .where(and(eq(steps.walkthroughId, walkthroughId), eq(steps.id, stepId)))
+    .get();
+  if (!current) {
+    return undefined;
+  }
+
+  const { clickX, clickY, redactions } = input;
+  if (
+    typeof clickX !== "number" ||
+    !Number.isFinite(clickX) ||
+    clickX < 0 ||
+    clickX > current.viewportWidth ||
+    typeof clickY !== "number" ||
+    !Number.isFinite(clickY) ||
+    clickY < 0 ||
+    clickY > current.viewportHeight ||
+    !isValidRedactions(redactions)
+  ) {
+    throw new InvalidStepContentError();
+  }
+
   return db
     .update(steps)
-    .set({ description: input.description.trim(), title: input.title.trim() })
+    .set({
+      clickX,
+      clickY,
+      description: input.description.trim(),
+      redactions,
+      title: input.title.trim(),
+    })
     .where(and(eq(steps.walkthroughId, walkthroughId), eq(steps.id, stepId)))
     .returning()
     .get();

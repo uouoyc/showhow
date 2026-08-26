@@ -1,6 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { screenshotsDir } from "@/lib/database";
+import { renderStepScreenshot } from "@/lib/screenshots";
+import { findStepByScreenshotFile } from "@/lib/steps";
 
 const uuid = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
 const screenshotName = new RegExp(`^${uuid}_${uuid}\\.(png|jpg)$`, "i");
@@ -16,9 +15,13 @@ export async function GET(
   }
 
   try {
-    const image = await readFile(join(screenshotsDir, file));
+    const step = findStepByScreenshotFile(file);
+    if (!step) {
+      return new Response(null, { status: 404 });
+    }
+    const image = await renderStepScreenshot(step);
     const headers: Record<string, string> = {
-      "cache-control": "public, max-age=31536000, immutable",
+      "cache-control": "no-store",
       "content-type": file.toLowerCase().endsWith(".png")
         ? "image/png"
         : "image/jpeg",
@@ -27,7 +30,7 @@ export async function GET(
     if (new URL(request.url).searchParams.get("download") === "1") {
       headers["content-disposition"] = `attachment; filename="${file}"`;
     }
-    return new Response(image, { headers });
+    return new Response(Uint8Array.from(image), { headers });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return new Response(null, { status: 404 });

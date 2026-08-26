@@ -10,7 +10,11 @@ rmSync(buildDir, { force: true, recursive: true });
 try {
   const result = spawnSync(
     process.execPath,
-    [join("node_modules", "@playwright", "test", "cli.js"), "test"],
+    [
+      join("node_modules", "@playwright", "test", "cli.js"),
+      "test",
+      ...process.argv.slice(2).filter((argument) => argument !== "--"),
+    ],
     {
       env: { ...process.env, SHOWHOW_E2E_DATA_DIR: dataDir },
       stdio: "inherit",

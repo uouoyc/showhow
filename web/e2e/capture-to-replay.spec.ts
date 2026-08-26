@@ -47,9 +47,64 @@ test("capture payload persists and completes a public Replay", async ({
   await expect(page).toHaveURL(`/edit/${walkthrough.id}`);
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 
+  const screenshotEditor = page.getByTestId("step-screenshot-editor");
+  const editorBounds = await screenshotEditor.boundingBox();
+  if (!editorBounds) {
+    throw new Error("Step screenshot editor is not visible.");
+  }
+  await screenshotEditor.click({
+    position: {
+      x: editorBounds.width * 0.25,
+      y: editorBounds.height * 0.75,
+    },
+  });
+  await page.getByRole("button", { name: "Draw redaction" }).click();
+  const redactionBounds = await screenshotEditor.boundingBox();
+  if (!redactionBounds) {
+    throw new Error("Step screenshot editor is not visible.");
+  }
+  await page.mouse.move(
+    redactionBounds.x + redactionBounds.width * 0.1,
+    redactionBounds.y + redactionBounds.height * 0.1,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    redactionBounds.x + redactionBounds.width * 0.3,
+    redactionBounds.y + redactionBounds.height * 0.3,
+  );
+  await page.mouse.up();
+  await expect(page.getByTestId("editor-redaction")).toBeVisible();
+  const addCenteredRedaction = page.getByRole("button", {
+    name: "Add centered redaction",
+  });
+  await addCenteredRedaction.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("editor-redaction")).toHaveCount(2);
+  await page.getByLabel("Redaction 2 X (%)").fill("10");
+  await expect(page.getByTestId("editor-redaction").nth(1)).toHaveAttribute(
+    "style",
+    /left: 10%/,
+  );
+  const removeSecondRedaction = page.getByRole("button", {
+    name: "Remove redaction 2",
+  });
+  await removeSecondRedaction.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("editor-redaction")).toHaveCount(1);
+  await page.getByRole("button", { name: "Save Step" }).click();
+  await expect(page.getByText("Changes saved.")).toBeVisible();
+
   await page.goto(`/w/${walkthrough.slug}`);
   await page.getByRole("button", { name: "Start Walkthrough" }).click();
   await expect(page.getByText("Step 1 of 1")).toBeVisible();
+  const [hotspotLeft, hotspotTop] = await page
+    .getByTestId("replay-hotspot")
+    .evaluate((element) => [
+      Number.parseFloat(element.style.left),
+      Number.parseFloat(element.style.top),
+    ]);
+  expect(Math.abs(hotspotLeft - 25)).toBeLessThan(0.2);
+  expect(Math.abs(hotspotTop - 75)).toBeLessThan(0.2);
   await page.getByRole("button", { name: "Complete Walkthrough" }).click();
   await expect(page.getByText("Walkthrough complete")).toBeVisible();
 
@@ -144,4 +199,42 @@ test("editor directory reorders Steps by drag and drop", async ({
   await expect(directory.getByRole("button").first()).toHaveAccessibleName(
     "Step 1: button Second",
   );
+});
+
+test("home imports a portable Walkthrough JSON file", async ({ page }) => {
+  const title = "Imported portable Walkthrough";
+  await page.goto("/");
+  await page.getByLabel("Import Walkthrough JSON").setInputFiles({
+    buffer: Buffer.from(
+      JSON.stringify({
+        formatVersion: 1,
+        steps: [
+          {
+            captureId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            clickX: 50,
+            clickY: 50,
+            description: "Restore this Step.",
+            elementLabel: "button Restore",
+            elementRect: { height: 20, width: 40, x: 30, y: 40 },
+            pageUrl: "https://example.test/import",
+            redactions: [],
+            screenshotDataUrl:
+              "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+            sequence: 1,
+            title: "Restore",
+            viewportHeight: 100,
+            viewportWidth: 100,
+          },
+        ],
+        walkthrough: { ctaUrl: null, slug: "ignored", title },
+      }),
+    ),
+    mimeType: "application/json",
+    name: "walkthrough.json",
+  });
+  await page
+    .getByRole("button", { name: "Import Walkthrough", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/edit\/[a-f0-9-]+$/);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
 });

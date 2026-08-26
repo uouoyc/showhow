@@ -53,15 +53,19 @@ Open `chrome://extensions` in Chrome, enable Developer mode, choose Load unpacke
 ### 5. Record and publish
 
 1. The extension connects to `http://localhost:3000`; enter a title and click **Start recording**.
-2. Complete the browser flow, then click **Stop recording**.
+2. Complete the browser flow across active tabs in the same window, then click **Stop recording**.
 3. The extension opens the editor, where you can:
    - edit the Walkthrough title and CTA URL;
    - edit each Step title and description;
+   - click a screenshot to move its Hotspot;
+   - drag privacy redactions over sensitive screenshot regions;
    - reorder Steps by dragging the directory or using Up/Down;
    - delete Steps, download screenshots, and export JSON.
-4. Copy the public link (`/w/[slug]`) or iframe embed code.
+4. Import a Showhow JSON export from the home page when you need to restore or copy a Walkthrough.
+5. Copy the public link (`/w/[slug]`) or iframe embed code.
 
 The CTA URL is shown as a **Continue** button after the reader completes the final Step.
+Failed Step uploads stay in extension storage and resume on the next Recording event, including after an MV3 service worker restart.
 
 ## Project structure
 
@@ -111,7 +115,17 @@ web/data/
 
 Stop the service and copy the entire `DATA_DIR`, including `showhow.db` and `screenshots/`. Restore them to the same directory before starting the service again.
 
+Portable JSON exports include their screenshots and can be restored from the home page. Saved redactions are burned into screenshots served over HTTP, downloaded, or included in JSON exports. The original files remain unchanged inside the administrator-controlled `DATA_DIR`.
+
+An imported JSON file may contain at most 250 Steps and may not exceed 256 MiB.
+
 ### Tests
+
+Install Playwright's Chromium once for the MV3 extension E2E test:
+
+```bash
+pnpm --filter web exec playwright install chromium
+```
 
 ```bash
 pnpm format      # format
@@ -122,13 +136,11 @@ pnpm test:e2e    # E2E tests
 pnpm build       # build
 ```
 
-E2E coverage includes Walkthrough creation, screenshot persistence, the editor, drag-and-drop ordering, public Replay, Hotspot activation, and completion statistics.
+E2E coverage includes the real MV3 extension recording across tabs, portable import, screenshot persistence and redaction, the editor, drag-and-drop ordering, public Replay, Hotspot activation, and completion statistics.
 
 ## Limitations
 
 - The original click is not blocked or replayed, so a screenshot may already show the post-click state.
 - Screenshots are captured serially with at least 500ms between calls.
-- Pending uploads are not recovered after the extension or service worker restarts.
-- A Recording is bound to its original tab; clicks in another tab are rejected.
 - Chrome internal pages, the Chrome Web Store, and pages that reject content scripts cannot be recorded.
 - Cross-origin iframe clicks capture the outer page; sandboxed or unavailable frames, rotated transforms, and skewed transforms may cause capture failures or Hotspot offsets.

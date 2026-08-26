@@ -13,7 +13,10 @@ export async function PATCH(request: Request, { params }: StepParams) {
 
     const input = body as Record<string, unknown>;
     const step = updateStep(id, stepId, {
+      clickX: input.clickX,
+      clickY: input.clickY,
       description: input.description,
+      redactions: input.redactions,
       title: input.title,
     });
 

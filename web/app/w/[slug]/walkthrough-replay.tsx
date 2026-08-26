@@ -210,6 +210,7 @@ export function WalkthroughReplay({
               : `Continue to Step ${index + 2}`
           }
           className="absolute size-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-blue-600 shadow-lg outline-none focus-visible:ring-4 focus-visible:ring-blue-300"
+          data-testid="replay-hotspot"
           onClick={advance}
           style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
           type="button"
