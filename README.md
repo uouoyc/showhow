@@ -1,30 +1,28 @@
 # Showhow
 
-A self-hosted tool for recording browser interactions and publishing interactive Walkthroughs.
+自托管的浏览器操作录制与交互式 Walkthrough 发布工具。
 
-[中文](README.zh-CN.md)
+## 快速开始
 
-## Quick start
-
-### Requirements
+### 环境要求
 
 - Node.js >= 24.14.0
 - pnpm >= 11.22.0
 - Chrome
 
-### 1. Install dependencies
+### 1. 安装依赖
 
 ```bash
 pnpm install
 ```
 
-### 2. Configure AI (optional)
+### 2. 配置 AI（可选）
 
 ```bash
 cp web/.env.example web/.env
 ```
 
-Edit `web/.env` and configure a provider compatible with the OpenAI Responses API:
+编辑 `web/.env`，配置兼容 OpenAI Responses API 的模型：
 
 ```dotenv
 AI_BASE_URL=https://api.openai.com/v1
@@ -32,76 +30,76 @@ AI_TOKEN=your-token
 AI_MODEL=gpt-5-mini
 ```
 
-Without `AI_TOKEN`, Step descriptions use the recorded element labels.
+未配置 `AI_TOKEN` 时，Step 描述将使用录制到的元素标签。
 
-### 3. Start the service
+### 3. 启动服务
 
 ```bash
 pnpm dev
 ```
 
-The Web application runs at `http://localhost:3000`.
+Web 应用运行在 `http://localhost:3000`。
 
-### 4. Load the extension
+### 4. 加载扩展
 
 ```bash
 pnpm --filter extension build
 ```
 
-Open `chrome://extensions` in Chrome, enable Developer mode, choose Load unpacked, and select the `extension/` directory.
+打开 Chrome 的 `chrome://extensions`，开启「开发者模式」→「加载已解压的扩展程序」，选择 `extension/` 目录。
 
-### 5. Record and publish
+### 5. 录制与发布
 
-1. The extension connects to `http://localhost:3000`; enter a title and click **Start recording**.
-2. Complete the browser flow across active tabs in the same window, then click **Stop recording**.
-3. The extension opens the editor, where you can:
-   - edit the Walkthrough title and CTA URL;
-   - edit each Step title and description;
-   - click a screenshot to move its Hotspot;
-   - drag privacy redactions over sensitive screenshot regions;
-   - reorder Steps by dragging the directory or using Up/Down;
-   - delete Steps, download screenshots, and export JSON.
-4. Import a Showhow JSON export from the home page when you need to restore or copy a Walkthrough.
-5. Copy the public link (`/w/[slug]`) or iframe embed code.
+1. 扩展连接 `http://localhost:3000`，输入标题后点击 **Start recording**
+2. 在同一窗口的活动 tab 间完成点击流程，点击 **Stop recording**
+3. 扩展自动打开编辑器，支持：
+   - 修改 Walkthrough 标题和 CTA URL
+   - 编辑每个 Step 的标题和描述
+   - 点击截图调整 Hotspot
+   - 拖拽隐私遮罩覆盖截图中的敏感区域
+   - 拖拽或 Up/Down 调整 Step 顺序
+   - 删除 Step、下载截图、导出 JSON
+4. 需要恢复或复制 Walkthrough 时，在首页导入 Showhow JSON
+5. 复制公开链接（`/w/[slug]`）或 iframe 嵌入代码
 
-The CTA URL is shown as a **Continue** button after the reader completes the final Step.
-Failed Step uploads stay in extension storage and resume on the next Recording event, including after an MV3 service worker restart.
+CTA URL 会在读者完成最后一个 Step 后显示为 **Continue** 按钮。
+失败的 Step 上传会保留在扩展存储中，并在下一次 Recording 事件恢复，包括 MV3 service worker 重启之后。
 
-## Project structure
+## 项目结构
 
 ```text
 showhow/
-├── extension/          # Chrome MV3 extension (recording, screenshots, uploads)
-├── web/                # Next.js 16 app (editor, Replay, API)
-│   ├── data/           # SQLite + screenshots directory (set by DATA_DIR)
-│   └── drizzle/        # database migrations (do not delete)
+├── extension/          # Chrome MV3 扩展（录制、截图、上传）
+├── web/                # Next.js 16 应用（编辑器、Replay、API）
+│   ├── data/           # SQLite + 截图目录（由 DATA_DIR 指定）
+│   └── drizzle/        # 数据库迁移文件（请勿删除）
 ```
 
-**Capture path:**
+**录制链路：**
 
 ```text
-page click → content script → service worker screenshot → Web API → SQLite + screenshots/
+页面点击 → content script → service worker 截图 → Web API → SQLite + screenshots/
 ```
 
-## Deployment
+## 部署
 
 ### Docker Compose
 
-For the first launch or after code changes:
+首次启动或代码变更时：
 
 ```bash
 docker compose up -d --build
 ```
 
-When the image is already up to date:
+镜像已是最新时：
 
 ```bash
 docker compose up -d
 ```
 
-### Data directory
+### 数据目录
 
-The default is `web/data/`:
+默认使用 `web/data/`：
 
 ```text
 web/data/
@@ -109,38 +107,38 @@ web/data/
 └── screenshots/
 ```
 
-## Maintenance
+## 维护
 
-### Backup
+### 备份
 
-Stop the service and copy the entire `DATA_DIR`, including `showhow.db` and `screenshots/`. Restore them to the same directory before starting the service again.
+停止服务后，复制整个 `DATA_DIR`（包含 `showhow.db` 和 `screenshots/`）。恢复时放回原目录即可。
 
-Portable JSON exports include their screenshots and can be restored from the home page. Saved redactions are burned into screenshots served over HTTP, downloaded, or included in JSON exports. The original files remain unchanged inside the administrator-controlled `DATA_DIR`.
+Portable JSON 导出会包含截图，可从首页恢复。保存的遮罩会烧录到通过 HTTP 提供、下载或写入 JSON 导出的截图中；管理员控制的 `DATA_DIR` 内仍保留原始文件。
 
-An imported JSON file may contain at most 250 Steps and may not exceed 256 MiB.
+导入的 JSON 文件最多包含 250 个 Step，且不能超过 256 MiB。
 
-### Tests
+### 测试
 
-Install Playwright's Chromium once for the MV3 extension E2E test:
+首次运行 MV3 扩展 E2E 前，安装 Playwright Chromium：
 
 ```bash
 pnpm --filter web exec playwright install chromium
 ```
 
 ```bash
-pnpm format      # format
-pnpm lint        # lint
-pnpm typecheck   # type check
-pnpm test        # unit tests
-pnpm test:e2e    # E2E tests
-pnpm build       # build
+pnpm format      # 格式化
+pnpm lint        # 代码检查
+pnpm typecheck   # 类型检查
+pnpm test        # 单元测试
+pnpm test:e2e    # E2E 测试
+pnpm build       # 构建
 ```
 
-E2E coverage includes the real MV3 extension recording across tabs, portable import, screenshot persistence and redaction, the editor, drag-and-drop ordering, public Replay, Hotspot activation, and completion statistics.
+E2E 覆盖：真实 MV3 扩展跨 tab 录制、portable import、截图保存与遮罩、编辑器、拖拽排序、公开 Replay、Hotspot、完成统计。
 
-## Limitations
+## 限制
 
-- The original click is not blocked or replayed, so a screenshot may already show the post-click state.
-- Screenshots are captured serially with at least 500ms between calls.
-- Chrome internal pages, the Chrome Web Store, and pages that reject content scripts cannot be recorded.
-- Cross-origin iframe clicks capture the outer page; sandboxed or unavailable frames, rotated transforms, and skewed transforms may cause capture failures or Hotspot offsets.
+- 原始点击不会被阻塞或重放，截图可能已是点击后状态
+- 连续截图间隔至少 500ms
+- 无法录制：Chrome 内部页面、Chrome Web Store、拒绝 content script 的页面
+- 跨域 iframe 点击会捕获外层页面截图；沙盒 iframe、不可访问 frame、旋转/倾斜变换可能导致截图失败或 Hotspot 偏移
